@@ -1,0 +1,116 @@
+================================================================
+STANDING ROCK STEWARDSHIP CO. — RENDER BACKEND DEPLOYMENT
+================================================================
+
+DEPLOY THE BACKEND FIRST — you need the Render URL before
+finishing the Netlify frontend setup.
+
+
+STEP 1 — CREATE A RENDER ACCOUNT
+----------------------------------
+1. Go to: https://render.com and sign up (free).
+2. Connect your GitHub account when prompted (you will push this
+   code to a GitHub repo in Step 2).
+
+
+STEP 2 — PUSH TO GITHUB
+-------------------------
+1. Extract this ZIP to a folder on your computer.
+2. Open a terminal in that folder and run:
+
+     git init
+     git add .
+     git commit -m "SRSC backend initial deploy"
+     git branch -M main
+
+3. Go to github.com → New repository
+   Name it: srsc-backend
+   Leave it Private. Click "Create repository".
+
+4. Back in your terminal, run the two commands GitHub shows you:
+     git remote add origin https://github.com/YOUR-USERNAME/srsc-backend.git
+     git push -u origin main
+
+
+STEP 3 — DEPLOY ON RENDER
+---------------------------
+Option A — Automatic (uses render.yaml, recommended):
+1. In Render, go to: Dashboard → New → Blueprint
+2. Connect your GitHub account and select the srsc-backend repo.
+3. Render reads render.yaml and configures everything automatically.
+4. Click "Apply". Render will install dependencies and start the server.
+5. First deploy takes 3-5 minutes.
+
+Option B — Manual Web Service:
+1. In Render go to: New → Web Service
+2. Connect the srsc-backend GitHub repo.
+3. Configure:
+     Name:           srsc-backend
+     Region:         Oregon (US West) or closest to you
+     Branch:         main
+     Runtime:        Node
+     Build Command:  npm install
+     Start Command:  node dist/index.cjs
+     Instance Type:  Free
+4. Under "Advanced", add environment variables:
+     NODE_ENV=production
+     PORT=10000
+5. Click "Create Web Service".
+
+
+STEP 4 — NOTE YOUR RENDER URL
+-------------------------------
+Once deployed, Render gives you a URL like:
+  https://srsc-backend.onrender.com
+
+Copy this URL — you will need it in Step 2 of the Netlify setup.
+
+
+STEP 5 — SET THE FRONTEND URL (CORS, do this after Netlify is live)
+--------------------------------------------------------------------
+1. In Render → your service → Environment
+2. Add:
+     Key:   FRONTEND_URL
+     Value: https://standingrockstewards.com
+            (or your netlify.app URL)
+3. Render will redeploy automatically.
+
+
+IMPORTANT — FREE TIER COLD STARTS
+-----------------------------------
+Render's free tier spins down services after 15 minutes of inactivity.
+The first request after a period of no use may take 30-60 seconds.
+This is normal. Upgrade to the Starter plan ($7/mo) to keep it always on.
+
+
+WHAT'S IN THIS ZIP
+-------------------
+dist/index.cjs    — Compiled Express server (all API routes bundled)
+data.db           — SQLite database (pre-seeded with demo data)
+package.json      — Dependencies manifest
+render.yaml       — Render blueprint config (auto-configures deployment)
+.env.example      — Environment variable reference
+
+
+DATABASE NOTES
+---------------
+- SQLite data lives in data.db in the project root.
+- Render's free tier uses ephemeral disk — data.db will reset on redeploy.
+- For persistent data across redeploys on Render, either:
+  (a) Upgrade to a paid plan and add a Render Disk ($1/mo), or
+  (b) Migrate to Postgres (Render offers a free Postgres instance).
+  Contact fansler.cc@standingrockstewards.com for migration assistance.
+
+
+DEMO LOGIN CREDENTIALS
+-----------------------
+Admin:       admin / admin123       (Chris Fansler — full access)
+Field Tech:  jake / jake123
+             marcus / marcus123
+Client:      jsmith / client123
+             rhenderson / client123
+             apatel / client123
+
+================================================================
+Need help? Contact: fansler.cc@standingrockstewards.com
+================================================================
