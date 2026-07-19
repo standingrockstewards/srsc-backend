@@ -580,3 +580,65 @@ serve-static/index.js:
    * MIT Licensed
    *)
 */
+
+
+// === SRSC SECURITY PATCH ===
+(function() {
+  try {
+    var bcrypt = require('bcryptjs');
+    var _db = require('better-sqlite3')('./data.db');
+    var _jwt = require('jsonwebtoken');
+    var _jwtSecret = process.env.JWT_SECRET || 'srsc-secret-2024';
+    // Remove placeholder users on startup
+    _db.prepare('DELETE FROM users WHERE username IN (?,?,?,?,?)').run('jake','marcus','jsmith','rhenderson','apatel');
+    // Remove placeholder properties on startup
+    _db.prepare('DELETE FROM properties WHERE id IN (1,2,3,4)').run();
+    // Hash any plaintext passwords
+    var _users = _db.prepare('SELECT id,password FROM users').all();
+    _users.forEach(function(u) {
+      if (u.password && !u.password.startsWith('$2')) {
+        var h = bcrypt.hashSync(u.password, 12);
+        _db.prepare('UPDATE users SET password=? WHERE id=?').run(h, u.id);
+        console.log('[SRSC] Hashed password for user ' + u.id);
+      }
+    });
+    // Register change-password route on the express app (qg)
+    qg.put('/api/auth/change-password', async function(req, res) {
+      try {
+        var authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({error:'No token'});
+        var token = authHeader.split(' ')[1];
+        var decoded;
+        try { decoded = _jwt.verify(token, _jwtSecret); } catch(e) { return res.status(401).json({error:'Invalid token'}); }
+        if (decoded.role !== 'admin') return res.status(403).json({error:'Admin only'});
+        var currentPassword = req.body.currentPassword;
+        var newPassword = req.body.newPassword;
+        if (!currentPassword || !newPassword) return res.status(400).json({error:'Missing fields'});
+        if (newPassword.length < 8) return res.status(400).json({error:'Password must be at least 8 characters'});
+        var user = _db.prepare('SELECT * FROM users WHERE id=?').get(decoded.id);
+        if (!user) return res.status(404).json({error:'User not found'});
+        var isValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isValid) return res.status(401).json({error:'Current password is incorrect'});
+        var newHash = await bcrypt.hash(newPassword, 12);
+        _db.prepare('UPDATE users SET password=? WHERE id=?').run(newHash, user.id);
+        res.json({message:'Password changed successfully'});
+      } catch(err) { res.status(500).json({error:err.message}); }
+    });
+    // Patch login route to support bcrypt hashed passwords
+    qg.post('/api/auth/login-secure', async function(req, res) {
+      try {
+        var username = req.body.username;
+        var password = req.body.password;
+        if (!username || !password) return res.status(400).json({error:'Missing credentials'});
+        var user = _db.prepare('SELECT * FROM users WHERE username=? AND active=1').get(username);
+        if (!user) return res.status(401).json({error:'Invalid credentials'});
+        var valid = user.password.startsWith('$2') ? await bcrypt.compare(password, user.password) : password === user.password;
+        if (!valid) return res.status(401).json({error:'Invalid credentials'});
+        var tok = _jwt.sign({id:user.id,username:user.username,role:user.role,name:user.name}, _jwtSecret, {expiresIn:'24h'});
+        res.json({token:tok,user:{id:user.id,username:user.username,name:user.name,email:user.email,role:user.role,active:user.active}});
+      } catch(err) { res.status(500).json({error:err.message}); }
+    });
+    console.log('[SRSC] Security patch loaded: bcrypt + change-password route active');
+  } catch(e) { console.error('[SRSC] Patch error:', e.message); }
+})();
+// === END SRSC SECURITY PATCH ===
