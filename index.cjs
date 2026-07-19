@@ -24,7 +24,7 @@
         });
       }catch(e){console.error('[SRSC] DB startup error:',e.message);}
 		                  app.use(function(req,res,next){
-							    res.setHeader("Access-Control-Allow-Origin","*");res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization");res.setHeader("Access-Control-Allow-Methods","GET,POST,PUT,DELETE,OPTIONS");if(req.method==="OPTIONS"){return res.status(204).end();}
+							    res.setHeader("Access-Control-Allow-Origin",req.headers.origin||"https://standingrockstewards.com");res.setHeader("Access-Control-Allow-Credentials","true");res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization");res.setHeader("Access-Control-Allow-Methods","GET,POST,PUT,DELETE,OPTIONS");if(req.method==="OPTIONS"){return res.status(204).end();}
         if(req.method==="OPTIONS"&&(req.url==="/api/auth/login"||req.url==="/api/auth/change-password")){return res.status(204).end();}if(req.method==="POST"&&req.url==="/api/auth/login"){
           var body="";
           req.on("data",function(d){body+=d;});
