@@ -41,7 +41,7 @@
         });
         if(app._router&&app._router.stack){app._router.stack.unshift({handle:layer.dispatch.bind(layer),regexp:/^\/api\/auth\/login\/?$/i,keys:[],sensitive:false,strict:false,end:true,path:'/api/auth/login',fn:layer});}
         console.log('[SRSC] bcrypt login interceptor inserted at front of router stack');
-      });hange-password route BEFORE other routes
+            // Add change-password route BEFORE other routes
       app.put('/api/auth/change-password',async function(req,res){
         try{
           var auth=req.headers.authorization;
