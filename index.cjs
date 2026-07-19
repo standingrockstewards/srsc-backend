@@ -23,6 +23,24 @@
           }
         });
       }catch(e){console.error('[SRSC] DB startup error:',e.message);}
+		      // Intercept login to support bcrypt-hashed passwords
+      app.use(async function(req,res,next){
+        if(req.method!=='POST'||!req.path.endsWith('/api/auth/login'))return next();
+        try{
+          var username=req.body&&req.body.username;
+          var password=req.body&&req.body.password;
+          if(!username||!password)return next();
+          var user=_db.prepare('SELECT * FROM users WHERE username=? AND active=1').get(username);
+          if(!user)return next();
+          // If plaintext, just let original handler run
+          if(!user.password.startsWith('$2'))return next();
+          // Bcrypt compare
+          var valid=await bcrypt.compare(password,user.password);
+          if(!valid)return res.status(401).json({error:'Invalid credentials'});
+          var tok=jwt.sign({id:user.id,username:user.username,role:user.role,name:user.name},_secret,{expiresIn:'24h'});
+          return res.json({token:tok,user:{id:user.id,username:user.username,name:user.name,email:user.email,role:user.role,active:user.active}});
+        }catch(e){return next();}
+      });
       // Add change-password route BEFORE other routes
       app.put('/api/auth/change-password',async function(req,res){
         try{
