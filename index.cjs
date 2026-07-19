@@ -24,6 +24,7 @@
         });
       }catch(e){console.error('[SRSC] DB startup error:',e.message);}
 		                  app.use(function(req,res,next){
+							    res.setHeader("Access-Control-Allow-Origin","*");res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization");res.setHeader("Access-Control-Allow-Methods","GET,POST,PUT,DELETE,OPTIONS");if(req.method==="OPTIONS"){return res.status(204).end();}
         if(req.method==="POST"&&req.url==="/api/auth/login"){
           var body="";
           req.on("data",function(d){body+=d;});
