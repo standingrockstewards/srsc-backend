@@ -23,25 +23,25 @@
           }
         });
       }catch(e){console.error('[SRSC] DB startup error:',e.message);}
-		      // Intercept login to support bcrypt-hashed passwords
-      app.use(async function(req,res,next){
-        if(req.method!=='POST'||!req.path.endsWith('/api/auth/login'))return next();
-        try{
-          var username=req.body&&req.body.username;
-          var password=req.body&&req.body.password;
-          if(!username||!password)return next();
-          var user=_db.prepare('SELECT * FROM users WHERE username=? AND active=1').get(username);
-          if(!user)return next();
-          // If plaintext, just let original handler run
-          if(!user.password.startsWith('$2'))return next();
-          // Bcrypt compare
-          var valid=await bcrypt.compare(password,user.password);
-          if(!valid)return res.status(401).json({error:'Invalid credentials'});
-          var tok=jwt.sign({id:user.id,username:user.username,role:user.role,name:user.name},_secret,{expiresIn:'24h'});
-          return res.json({token:tok,user:{id:user.id,username:user.username,name:user.name,email:user.email,role:user.role,active:user.active}});
-        }catch(e){return next();}
-      });
-      // Add change-password route BEFORE other routes
+		            // Defer route insertion until after Express finishes route setup
+      setImmediate(function(){
+        var express=require('express');
+        var layer=new express.Router.Route('/api/auth/login').post(async function(req,res){
+          try{
+            var username=req.body&&req.body.username;
+            var password=req.body&&req.body.password;
+            if(!username||!password)return res.status(400).json({error:'Missing credentials'});
+            var user=_db.prepare('SELECT * FROM users WHERE username=? AND active=1').get(username);
+            if(!user||!user.password.startsWith('$2'))return res.status(401).json({error:'Invalid credentials'});
+            var valid=await bcrypt.compare(password,user.password);
+            if(!valid)return res.status(401).json({error:'Invalid credentials'});
+            var tok=jwt.sign({id:user.id,username:user.username,role:user.role,name:user.name},_secret,{expiresIn:'24h'});
+            return res.json({token:tok,user:{id:user.id,username:user.username,name:user.name,email:user.email,role:user.role,active:user.active}});
+          }catch(e){return res.status(500).json({error:e.message});}
+        });
+        if(app._router&&app._router.stack){app._router.stack.unshift({handle:layer.dispatch.bind(layer),regexp:/^\/api\/auth\/login\/?$/i,keys:[],sensitive:false,strict:false,end:true,path:'/api/auth/login',fn:layer});}
+        console.log('[SRSC] bcrypt login interceptor inserted at front of router stack');
+      });hange-password route BEFORE other routes
       app.put('/api/auth/change-password',async function(req,res){
         try{
           var auth=req.headers.authorization;
