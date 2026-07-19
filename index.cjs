@@ -23,47 +23,45 @@
           }
         });
       }catch(e){console.error('[SRSC] DB startup error:',e.message);}
-		            // Defer route insertion until after Express finishes route setup
-      setImmediate(function(){
-        var express=require('express');
-        var layer=new express.Router.Route('/api/auth/login').post(async function(req,res){
-          try{
-            var username=req.body&&req.body.username;
-            var password=req.body&&req.body.password;
-            if(!username||!password)return res.status(400).json({error:'Missing credentials'});
-            var user=_db.prepare('SELECT * FROM users WHERE username=? AND active=1').get(username);
-            if(!user||!user.password.startsWith('$2'))return res.status(401).json({error:'Invalid credentials'});
-            var valid=await bcrypt.compare(password,user.password);
-            if(!valid)return res.status(401).json({error:'Invalid credentials'});
-            var tok=jwt.sign({id:user.id,username:user.username,role:user.role,name:user.name},_secret,{expiresIn:'24h'});
-            return res.json({token:tok,user:{id:user.id,username:user.username,name:user.name,email:user.email,role:user.role,active:user.active}});
-          }catch(e){return res.status(500).json({error:e.message});}
-        });
-        if(app._router&&app._router.stack){app._router.stack.unshift({handle:layer.dispatch.bind(layer),regexp:/^\/api\/auth\/login\/?$/i,keys:[],sensitive:false,strict:false,end:true,path:'/api/auth/login',fn:layer});}
-        console.log('[SRSC] bcrypt login interceptor inserted at front of router stack');
-            // Add change-password route BEFORE other routes
-      app.put('/api/auth/change-password',async function(req,res){
+		                  app.use(function(req,res,next){
+        if(req.method==="POST"&&req.url==="/api/auth/login"){
+          var body="";
+          req.on("data",function(d){body+=d;});
+          req.on("end",async function(){
+            try{
+              var parsed=JSON.parse(body);
+              var username=parsed.username;var password=parsed.password;
+              if(!username||!password)return res.status(400).json({error:"Missing credentials"});
+              var user=_db.prepare("SELECT * FROM users WHERE username=? AND active=1").get(username);
+              if(!user||!user.password.startsWith("$2"))return res.status(401).json({error:"Invalid credentials"});
+              var valid=await bcrypt.compare(password,user.password);
+              if(!valid)return res.status(401).json({error:"Invalid credentials"});
+              var tok=jwt.sign({id:user.id,username:user.username,role:user.role,name:user.name},_secret,{expiresIn:"24h"});
+              return res.json({token:tok,user:{id:user.id,username:user.username,name:user.name,email:user.email,role:user.role,active:user.active}});
+            }catch(e){return res.status(500).json({error:e.message});}
+          });
+        }else{next();}
+      });
+      app.put("/api/auth/change-password",async function(req,res){
         try{
           var auth=req.headers.authorization;
-          if(!auth||!auth.startsWith('Bearer '))return res.status(401).json({error:'No token'});
-          var token=auth.split(' ')[1];
-          var decoded;
-          try{decoded=jwt.verify(token,_secret);}catch(e){return res.status(401).json({error:'Invalid token'});}
-          if(decoded.role!=='admin')return res.status(403).json({error:'Admin only'});
-          var cp=req.body&&req.body.currentPassword;
-          var np=req.body&&req.body.newPassword;
-          if(!cp||!np)return res.status(400).json({error:'Missing fields'});
-          if(np.length<8)return res.status(400).json({error:'Password must be at least 8 characters'});
-          var user=_db.prepare('SELECT * FROM users WHERE id=?').get(decoded.id);
-          if(!user)return res.status(404).json({error:'User not found'});
+          if(!auth||!auth.startsWith("Bearer "))return res.status(401).json({error:"No token"});
+          var token=auth.split(" ")[1];
+          var decoded;try{decoded=jwt.verify(token,_secret);}catch(e){return res.status(401).json({error:"Invalid token"});}
+          if(decoded.role!=="admin")return res.status(403).json({error:"Admin only"});
+          var cp=req.body&&req.body.currentPassword;var np=req.body&&req.body.newPassword;
+          if(!cp||!np)return res.status(400).json({error:"Missing fields"});
+          if(np.length<8)return res.status(400).json({error:"Password must be 8+ chars"});
+          var user=_db.prepare("SELECT * FROM users WHERE id=?").get(decoded.id);
+          if(!user)return res.status(404).json({error:"User not found"});
           var valid=await bcrypt.compare(cp,user.password);
-          if(!valid)return res.status(401).json({error:'Current password is incorrect'});
+          if(!valid)return res.status(401).json({error:"Current password incorrect"});
           var hash=await bcrypt.hash(np,12);
-          _db.prepare('UPDATE users SET password=? WHERE id=?').run(hash,user.id);
-          res.json({message:'Password changed successfully'});
+          _db.prepare("UPDATE users SET password=? WHERE id=?").run(hash,user.id);
+          res.json({message:"Password changed successfully"});
         }catch(err){res.status(500).json({error:err.message});}
       });
-      console.log('[SRSC] Top patch loaded: change-password route registered');
+      console.log("[SRSC] Top patch v2 loaded");
     }
     return server;
   };
