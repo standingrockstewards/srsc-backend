@@ -12,6 +12,7 @@
   },
   "dependencies": {
         "bcryptjs": "^2.4.3",
+        "nodemailer": "^6.9.14",
         "jsonwebtoken": "^9.0.0",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
