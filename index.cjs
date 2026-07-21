@@ -15,7 +15,7 @@
       var _secret=process.env.JWT_SECRET||'srsc-secret-2024';
       // Delete placeholder users and hash passwords at startup
       try{
-        _db.prepare('DELETE FROM users WHERE username IN (?,?,?,?,?)').run('jake','marcus','jsmith','rhenderson','apatel');try{_db.prepare('DELETE FROM properties').run();console.log('[SRSC] Cleared all demo properties');}catch(ep){console.error('[SRSC] Property clear error:',ep.message);}
+        _db.prepare('DELETE FROM users WHERE username IN (?,?,?,?,?)').run('jake','marcus','jsmith','rhenderson','apatel');
         var _users=_db.prepare('SELECT id,password FROM users').all();
         _users.forEach(function(u){
           if(u.password&&!u.password.startsWith('$2')){
