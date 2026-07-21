@@ -24,7 +24,7 @@
             console.log('[SRSC] Hashed password for user '+u.id);
           }
         });
-      }catch(e){console.error('[SRSC] DB startup error:',e.message);}
+      }catch(e){console.error('[SRSC] DB startup error:',e.message);}try{var _tt=_db.prepare("SELECT id FROM users WHERE username='testtech'").get();if(!_tt){var _tth=bcrypt.hashSync('TestPass123!',10);_db.prepare("INSERT INTO users (username,password,name,email,role,active) VALUES ('testtech',?,'Test Technician','testtech@standingrockstewards.com','field_tech',1)").run(_tth);console.log('[SRSC] testtech user seeded');}}catch(e){console.error('[SRSC] testtech seed error:',e.message);}
 		                  app.use(function(req,res,next){
 							    res.setHeader("Access-Control-Allow-Origin",req.headers.origin||"https://standingrockstewards.com");res.setHeader("Access-Control-Allow-Credentials","true");res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization");res.setHeader("Access-Control-Allow-Methods","GET,POST,PUT,DELETE,OPTIONS");if(req.method==="OPTIONS"){return res.status(204).end();}
         if(req.method==="OPTIONS"&&(req.url==="/api/auth/login"||req.url==="/api/auth/change-password")){return res.status(204).end();}if(req.method==="POST"&&req.url==="/api/auth/login"){
