@@ -2,7 +2,8 @@
 const Database = require('better-sqlite3');
 const jwt = require('jsonwebtoken');
 const db = new Database('./data.db');
-const JWT_SECRET = process.env.JWT_SECRET || 'srsc-secret-2024';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) { console.error('[SRSC] FATAL: JWT_SECRET env var is not set.'); process.exit(1); }
 
 db.prepare('CREATE TABLE IF NOT EXISTS vendor_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, vendor_id INTEGER, sender_id INTEGER, subject TEXT, body TEXT, read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
 
