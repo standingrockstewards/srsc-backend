@@ -21,10 +21,9 @@ function registerChangePasswordRoute(app) {
       } catch (e) {
         return res.status(401).json({ error: 'Invalid or expired token' });
       }
-      // Admin only
-      if (decoded.role !== 'admin') {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
+            // Any authenticated user may change their OWN password (self-service).
+      // Security is preserved by requiring a valid token + correct currentPassword below.
+      // The password updated is always the one belonging to decoded.id.
       const { currentPassword, newPassword } = req.body;
       if (!currentPassword || !newPassword) {
         return res.status(400).json({ error: 'currentPassword and newPassword are required' });
