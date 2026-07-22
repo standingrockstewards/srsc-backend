@@ -4,7 +4,8 @@ const Database = require('better-sqlite3');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const db = new Database('./data.db');
-const JWT_SECRET = process.env.JWT_SECRET || 'srsc-secret-2024';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) { console.error('[SRSC] FATAL: JWT_SECRET env var is not set.'); process.exit(1); }
 
 const mailer = nodemailer.createTransport({
   host: 'smtp.zoho.com',
