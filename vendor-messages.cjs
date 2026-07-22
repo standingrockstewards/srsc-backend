@@ -16,6 +16,16 @@ function auth(req) {
 }
 
 function registerVendorMessagesRoute(app) {
+  // Admin lists vendors (for assigning work orders / requesting documents)
+app.get('/api/vendors', function (req, res) {
+try {
+const u = auth(req);
+if (!u) return res.status(401).json({ error: 'Unauthorized' });
+if (u.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+const rows = db.prepare("SELECT id, username, name, email FROM users WHERE role = 'vendor' AND active = 1 ORDER BY name ASC").all();
+res.json(rows);
+} catch (e) { res.status(500).json({ error: e.message }); }
+});
   // Vendor fetches their own messages; admin can fetch any via ?vendor_id=
   app.get('/api/vendor-messages', function (req, res) {
     try {
