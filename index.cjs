@@ -12,7 +12,7 @@
       var jwt=require('jsonwebtoken');
       var Database=require('better-sqlite3');
       var _db=new Database('./data.db');
-      var _secret=process.env.JWT_SECRET||'srsc-secret-2024';
+      			var _secret=process.env.JWT_SECRET;if(!_secret){console.error('[SRSC] FATAL: JWT_SECRET env var is not set. Refusing to start with an insecure default.');process.exit(1);}
       // Delete placeholder users and hash passwords at startup
       try{
         _db.prepare('DELETE FROM users WHERE username IN (?,?,?,?,?)').run('jake','marcus','jsmith','rhenderson','apatel');
