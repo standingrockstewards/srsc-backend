@@ -4,7 +4,8 @@ const Database = require('better-sqlite3');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const db = new Database('./data.db');
-const JWT_SECRET = process.env.JWT_SECRET || 'srsc-secret-2024';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) { console.error('[SRSC] FATAL: JWT_SECRET env var is not set.'); process.exit(1); }
 
 db.prepare('CREATE TABLE IF NOT EXISTS assets (id INTEGER PRIMARY KEY AUTOINCREMENT, property_id INTEGER, name TEXT, category TEXT, make TEXT, model TEXT, serial TEXT, location TEXT, install_date TEXT, warranty_expires TEXT, notes TEXT, qr_token TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
 
