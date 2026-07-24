@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Database (SQLite — do NOT commit to repo; Render keeps its own copy)
+data.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Screenshots (dev artifacts)
+screenshots/
+
+# Env secrets
+.env
+.env.local
+.env.production
