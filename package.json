@@ -8,9 +8,11 @@
         "build": "echo no-op",
         "start": "NODE_ENV=production node index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+        "db:push": "drizzle-kit push --config=drizzle.v2.config.ts"
   },
   "dependencies": {
+        "pg": "^8.13.1",
+    "@paralleldrive/cuid2": "^2.2.2",
         "bcryptjs": "^2.4.3",
         "nodemailer": "^6.9.14",
         "jsonwebtoken": "^9.0.0",
@@ -107,10 +109,5 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
-  },
-  "overrides": {
-    "drizzle-kit": {
-      "@esbuild-kit/esm-loader": "npm:tsx@^4.20.4"
     }
-  }
 }
