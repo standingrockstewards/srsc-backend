@@ -9,12 +9,15 @@
 
 import { Router } from "express";
 import { requireAuthV2 } from "../../middleware/authV2";
-import healthRouter    from "./health";
-import authRouter      from "./auth";
-import customersRouter from "./customers";
-import propertiesRouter from "./properties";
-import referralsRouter from "./referrals";
-import vendorsRouter   from "./vendors";
+import healthRouter            from "./health";
+import authRouter              from "./auth";
+import customersRouter         from "./customers";
+import propertiesRouter        from "./properties";
+import referralsRouter         from "./referrals";
+import vendorsRouter           from "./vendors";
+import legalDocumentsRouter    from "./legalDocuments";
+import customerSignaturesRouter from "./customerSignatures";
+import monitoringEventsRouter  from "./monitoringEvents";
 
 const v2 = Router();
 
@@ -25,9 +28,12 @@ v2.use("/auth",   authRouter);     // POST /api/v2/auth/login, /logout, GET /me
 // ── Protected routes (all require a valid v2 session) ─────────────────────────
 v2.use(requireAuthV2);
 
-v2.use("/customers",  customersRouter);   // CRUD + ownership
-v2.use("/properties", propertiesRouter);  // CRUD + retainer sub-routes + ownership
-v2.use("/referrals",  referralsRouter);   // create (admin) + vest (admin) + list (self/admin)
-v2.use("/vendors",    vendorsRouter);     // CRUD + reviews + scorecard
+v2.use("/customers",           customersRouter);          // CRUD + ownership
+v2.use("/properties",          propertiesRouter);          // CRUD + retainer + lat/lng/shoreline
+v2.use("/referrals",           referralsRouter);           // create (admin) + vest + list
+v2.use("/vendors",             vendorsRouter);             // CRUD + reviews + scorecard
+v2.use("/legal-documents",     legalDocumentsRouter);      // versioned docs + active lookup
+v2.use("/customer-signatures", customerSignaturesRouter);  // append-only signatures
+v2.use("/monitoring-events",   monitoringEventsRouter);    // append-only events + acknowledge
 
 export default v2;

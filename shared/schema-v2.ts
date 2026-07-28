@@ -6,7 +6,7 @@
 
 import {
   pgTable, serial, varchar, text, decimal, integer,
-  boolean, timestamp, date, pgEnum,
+  boolean, timestamp, date, pgEnum, numeric, index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -57,9 +57,13 @@ export const propertiesV2 = pgTable("properties", {
   targetRetainerAmount: decimal("target_retainer_amount", { precision: 10, scale: 2 }).notNull(),
   lowBalanceAlertPct:   integer("low_balance_alert_pct").notNull().default(25),
   discountTierPct:      integer("discount_tier_pct").notNull().default(0),
-  active:               boolean("active").notNull().default(true),
-  createdAt:            timestamp("created_at").notNull().defaultNow(),
-  updatedAt:            timestamp("updated_at").notNull().defaultNow(),
+  active:                   boolean("active").notNull().default(true),
+  // Brick 3.5 — Map + Monitoring foundation (nullable, additive)
+  latitude:                 numeric("latitude", { precision: 9, scale: 6 }),
+  longitude:                numeric("longitude", { precision: 9, scale: 6 }),
+  nearestShorelineMarker:   text("nearest_shoreline_marker"),
+  createdAt:                timestamp("created_at").notNull().defaultNow(),
+  updatedAt:                timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const insertPropertyV2Schema = createInsertSchema(propertiesV2).omit({ id: true, createdAt: true, updatedAt: true });
@@ -193,3 +197,32 @@ export const legalDocuments = pgTable("legal_documents", {
 });
 
 export type LegalDocument = typeof legalDocuments.$inferSelect;
+
+// ─── monitoring_events (append-only) ───────────────────────────────────────────────────
+// Used by Bricks 8 (Storm Response) and 9 (Operations Map).
+// Append-only: no update/delete routes will ever be exposed.
+// payload must NEVER include alarm codes, alarm_panel_location, access_notes,
+// or any other high-sensitivity field (enforced at write time in service layer).
+export const monitoringEvents = pgTable(
+  "monitoring_events",
+  {
+    id:             serial("id").primaryKey(),
+    propertyId:     integer("property_id").notNull().references(() => propertiesV2.id),
+    source:         text("source").notNull(),           // 'anchorwatch' | 'shipshape' | 'signal_flare' | 'weather'
+    severity:       text("severity").notNull(),          // 'info' | 'warning' | 'critical'
+    category:       text("category").notNull(),
+    payload:        text("payload"),                     // JSON string; high-sensitivity fields excluded
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    propertyCreatedIdx: index("monitoring_events_property_created_idx").on(
+      t.propertyId,
+      t.createdAt,
+    ),
+  }),
+);
+
+export const insertMonitoringEventSchema = createInsertSchema(monitoringEvents).omit({ id: true, createdAt: true });
+export type InsertMonitoringEvent = z.infer<typeof insertMonitoringEventSchema>;
+export type MonitoringEvent = typeof monitoringEvents.$inferSelect;
