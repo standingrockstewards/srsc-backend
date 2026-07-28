@@ -20,6 +20,7 @@ import customerSignaturesRouter from "./customerSignatures";
 import eventsRouter            from "./monitoringEvents";  // Brick 6: mounted at /events
 import retainerRouter          from "./retainer";
 import creditsRouter           from "./credits";
+import vendorPaymentsRouter    from "./vendorPayments";     // Brick 7: payout-batches + vendor-payments
 
 const v2 = Router();
 
@@ -40,5 +41,6 @@ v2.use("/signatures",  customerSignaturesRouter);  // Brick 4: POST capture, GET
 v2.use("/events",      eventsRouter);              // Brick 6: GET /:id, POST /system, PATCH /:id/acknowledge
 v2.use("/retainer",    retainerRouter);            // Brick 5: ledger, balance, low-balance, statements, dunning
 v2.use("/credits",     creditsRouter);             // Brick 5: issue + apply credits
+v2.use("/",           vendorPaymentsRouter);       // Brick 7: /payout-batches, /vendor-payments/:id/*, /vendors/:id/payments
 
 export default v2;

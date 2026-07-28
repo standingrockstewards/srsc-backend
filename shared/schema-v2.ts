@@ -31,9 +31,14 @@ export const creditSourceEnum = pgEnum("credit_source", [
 export const RETAINER_ENTRY_TYPES = ["topup", "charge", "credit_applied", "adjustment"] as const;
 export type RetainerEntryType = typeof RETAINER_ENTRY_TYPES[number];
 
-export const vendorPaymentStatusEnum = pgEnum("vendor_payment_status", [
-  "pending", "batched", "paid", "failed",
-]);
+// vendor_payment_status is plain text in the live DB (no pg enum).
+// Allowed values enforced in TypeScript only.
+export const VENDOR_PAYMENT_STATUSES = ["pending", "scheduled", "paid", "failed"] as const;
+export type VendorPaymentStatus = typeof VENDOR_PAYMENT_STATUSES[number];
+
+// ── Money helper ─────────────────────────────────────────────────────────────
+// numeric(10,2) — matches the live DB money columns.
+export const money = (col: string) => numeric(col, { precision: 10, scale: 2 });
 
 // ─── customers ────────────────────────────────────────────────────────────────
 export const customers = pgTable("customers", {
@@ -181,20 +186,23 @@ export type InsertVendorReview = z.infer<typeof insertVendorReviewSchema>;
 export type VendorReview = typeof vendorReviews.$inferSelect;
 
 // ─── vendor_payments ─────────────────────────────────────────────────────────
+// vendor_payments — live schema verified 2026-07-28:
+//   id text, vendor_id text, batch_id text, amount numeric(10,2),
+//   status text, scheduled_for timestamptz, paid_at timestamptz,
+//   stripe_transfer_id text
+//   NO created_at / updated_at columns in the live table.
 export const vendorPayments = pgTable("vendor_payments", {
   id:               id(),
   vendorId:         text("vendor_id").notNull().references(() => vendors.id),
-  batchId:          varchar("batch_id", { length: 100 }),
-  amount:           decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  status:           vendorPaymentStatusEnum("status").notNull().default("pending"),
-  scheduledFor:     date("scheduled_for"),
-  paidAt:           timestamp("paid_at"),
-  stripeTransferId: varchar("stripe_transfer_id", { length: 255 }),
-  createdAt:        timestamp("created_at").notNull().defaultNow(),
-  updatedAt:        timestamp("updated_at").notNull().defaultNow(),
+  batchId:          text("batch_id"),
+  amount:           money("amount").notNull(),
+  status:           text("status").notNull().default("pending"),
+  scheduledFor:     timestamp("scheduled_for", { withTimezone: true }),
+  paidAt:           timestamp("paid_at",       { withTimezone: true }),
+  stripeTransferId: text("stripe_transfer_id"),
 });
 
-export const insertVendorPaymentSchema = createInsertSchema(vendorPayments).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVendorPaymentSchema = createInsertSchema(vendorPayments).omit({ id: true });
 export type InsertVendorPayment = z.infer<typeof insertVendorPaymentSchema>;
 export type VendorPayment = typeof vendorPayments.$inferSelect;
 
