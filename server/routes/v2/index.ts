@@ -17,7 +17,7 @@ import referralsRouter         from "./referrals";
 import vendorsRouter           from "./vendors";
 import legalDocumentsRouter    from "./legalDocuments";
 import customerSignaturesRouter from "./customerSignatures";
-import monitoringEventsRouter  from "./monitoringEvents";
+import eventsRouter            from "./monitoringEvents";  // Brick 6: mounted at /events
 import retainerRouter          from "./retainer";
 import creditsRouter           from "./credits";
 
@@ -30,14 +30,15 @@ v2.use("/auth",   authRouter);     // POST /api/v2/auth/login, /logout, GET /me
 // ── Protected routes (all require a valid v2 session) ─────────────────────────
 v2.use(requireAuthV2);
 
-v2.use("/customers",         customersRouter);          // CRUD + ownership
-v2.use("/properties",        propertiesRouter);          // CRUD + retainer + lat/lng/shoreline
-v2.use("/referrals",         referralsRouter);           // create (admin) + vest + list
-v2.use("/vendors",           vendorsRouter);             // CRUD + reviews + scorecard
-v2.use("/legal",             legalDocumentsRouter);      // Brick 4: GET :docType/active, GET :docType/versions, POST
-v2.use("/signatures",        customerSignaturesRouter);  // Brick 4: POST capture, GET list (ownership gated)
-v2.use("/monitoring-events", monitoringEventsRouter);    // append-only events + acknowledge
-v2.use("/retainer",          retainerRouter);            // Brick 5: ledger, balance, low-balance, statements, dunning
-v2.use("/credits",           creditsRouter);             // Brick 5: issue + apply credits
+v2.use("/customers",   customersRouter);          // CRUD + ownership
+v2.use("/properties",  propertiesRouter);          // CRUD + retainer + lat/lng/shoreline
+                                                   // Brick 6: /:propertyId/events (POST log, GET list)
+v2.use("/referrals",   referralsRouter);           // create (admin) + vest + list
+v2.use("/vendors",     vendorsRouter);             // CRUD + reviews + scorecard
+v2.use("/legal",       legalDocumentsRouter);      // Brick 4: GET :docType/active, GET :docType/versions, POST
+v2.use("/signatures",  customerSignaturesRouter);  // Brick 4: POST capture, GET list (ownership gated)
+v2.use("/events",      eventsRouter);              // Brick 6: GET /:id, POST /system, PATCH /:id/acknowledge
+v2.use("/retainer",    retainerRouter);            // Brick 5: ledger, balance, low-balance, statements, dunning
+v2.use("/credits",     creditsRouter);             // Brick 5: issue + apply credits
 
 export default v2;

@@ -11,11 +11,9 @@
  *   - Roles map directly: admin → full access, supervisor → full access,
  *     client → own records only, vendor → vendor-scoped only, field_tech → read-only.
  *
- * Ownership check strategy:
- *   - Admin / Supervisor: bypass ownership — always allowed.
- *   - Client: req.v2CustomerId must equal the :customerId param (or property's owner).
- *   - Vendor: blocked from all customer-data endpoints; vendor-scoped routes only.
- *   - Field Tech: read-only on non-sensitive v2 endpoints (vendor list, etc.).
+ * ID model:
+ *   - ALL route params that represent IDs are text (nanoid/cuid2). No parseInt anywhere.
+ *   - Ownership checks are string === string throughout.
  */
 
 import type { Request, Response, NextFunction } from "express";
@@ -26,7 +24,7 @@ import { propertiesRepo } from "../repositories/properties";
 // ─── Session type augmentation ────────────────────────────────────────────────
 declare module "express-session" {
   interface SessionData {
-    v2UserId?: number;
+    v2UserId?: number;   // v1 users.id (SQLite integer — internal only, never exposed as FK)
     v2Role?:   string;
   }
 }
@@ -35,9 +33,9 @@ declare module "express-session" {
 declare global {
   namespace Express {
     interface Request {
-      v2UserId?:     number;
+      v2UserId?:     number;       // v1 users.id (SQLite, internal only)
       v2Role?:       string;
-      v2CustomerId?: number | null; // resolved Postgres customers.id (null if staff)
+      v2CustomerId?: string | null; // Postgres customers.id — text (nanoid/cuid2)
     }
   }
 }
@@ -46,7 +44,7 @@ declare global {
 /**
  * Applied to ALL /api/v2 routes (except /api/v2/auth/login).
  * Rejects unauthenticated callers with 401.
- * Resolves v2CustomerId by joining users.email → customers.email.
+ * Resolves v2CustomerId (text) by joining users.email → customers.email.
  */
 export async function requireAuthV2(
   req: Request,
@@ -59,7 +57,6 @@ export async function requireAuthV2(
     return res.status(401).json({ error: "Unauthenticated — please log in via /api/v2/auth/login" });
   }
 
-  // Verify the user still exists in v1 store
   const user = storage.getUserById(session.v2UserId);
   if (!user || !user.active) {
     req.session.destroy(() => {});
@@ -69,10 +66,10 @@ export async function requireAuthV2(
   req.v2UserId = user.id;
   req.v2Role   = user.role;
 
-  // Resolve v2 customerId for client roles (join on email)
+  // Resolve v2 customerId (text) for client roles (join on email)
   if (user.role === "client") {
     const customer = await customersRepo.getByEmail(user.email);
-    req.v2CustomerId = customer?.id ?? null;
+    req.v2CustomerId = customer?.id ?? null;  // string | null
   } else {
     req.v2CustomerId = null; // staff have no customer record
   }
@@ -107,9 +104,10 @@ export function requireNotVendor(
 
 // ─── requireSelfOrAdmin (customer ownership) ──────────────────────────────────
 /**
- * Ensures that a client can only access their own customer record.
+ * Ensures a client can only access their own customer record.
  * Admin / Supervisor pass through unconditionally.
  * Vendors are blocked (403).
+ * All IDs are text — no parseInt.
  *
  * Usage:  router.get("/:customerId/...", requireSelfOrAdmin("customerId"), handler)
  */
@@ -120,8 +118,8 @@ export function requireSelfOrAdmin(paramName = "customerId") {
     }
     if (req.v2Role === "admin" || req.v2Role === "supervisor") return next();
 
-    const paramId = parseInt(req.params[paramName]);
-    if (isNaN(paramId)) return res.status(400).json({ error: "Invalid id" });
+    const paramId = req.params[paramName];
+    if (!paramId) return res.status(400).json({ error: "Invalid id" });
 
     if (req.v2CustomerId !== paramId) {
       return res.status(403).json({
@@ -135,9 +133,10 @@ export function requireSelfOrAdmin(paramName = "customerId") {
 // ─── requirePropertyOwnerOrAdmin ──────────────────────────────────────────────
 /**
  * For property-scoped routes: verifies the authenticated client owns the
- * property identified by req.params.id (or :propertyId).
+ * property identified by req.params[paramName].
  * Admin / Supervisor bypass.
- * Vendors blocked.
+ * Vendors blocked (403).
+ * All IDs are text — no parseInt.
  */
 export function requirePropertyOwnerOrAdmin(paramName = "id") {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -146,12 +145,13 @@ export function requirePropertyOwnerOrAdmin(paramName = "id") {
     }
     if (req.v2Role === "admin" || req.v2Role === "supervisor") return next();
 
-    const propertyId = parseInt(req.params[paramName]);
-    if (isNaN(propertyId)) return res.status(400).json({ error: "Invalid property id" });
+    const propertyId = req.params[paramName];
+    if (!propertyId) return res.status(400).json({ error: "Invalid property id" });
 
     const property = await propertiesRepo.getById(propertyId);
     if (!property) return res.status(404).json({ error: "Property not found" });
 
+    // Both are text (string) — straight equality
     if (property.customerId !== req.v2CustomerId) {
       return res.status(403).json({
         error: "Forbidden — you may only access your own properties",
@@ -161,12 +161,12 @@ export function requirePropertyOwnerOrAdmin(paramName = "id") {
   };
 }
 
-// ─── requireVendorSelf ────────────────────────────────────────────────────────
+// ─── requireVendorSelfOrAdmin ─────────────────────────────────────────────────
 /**
  * Vendor-scoped routes: only the vendor themselves (or admin) can access.
- * Clients blocked — preserves the middleman model (clients never see vendor identity).
+ * Clients blocked — preserves the middleman model.
  */
-export function requireVendorSelfOrAdmin(paramName = "id") {
+export function requireVendorSelfOrAdmin(_paramName = "id") {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (req.v2Role === "admin" || req.v2Role === "supervisor") return next();
 
@@ -176,9 +176,6 @@ export function requireVendorSelfOrAdmin(paramName = "id") {
       });
     }
 
-    // For vendors: they have no customerId, but their v2UserId maps to a vendor row
-    // via users.email === vendors.email — enforced in the route handler for now.
-    // Middleware just allows vendor role through for vendor-scoped routes.
     if (req.v2Role === "vendor") return next();
 
     // field_tech: read-only pass-through (route handlers decide)

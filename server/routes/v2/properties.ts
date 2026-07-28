@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { propertiesRepo } from "../../repositories/properties";
 import { retainerService } from "../../services/retainerService";
+import { monitoringService, VISIT_TYPES, SEVERITIES } from "../../services/monitoringService";
 import { insertPropertyV2Schema } from "../../../shared/schema-v2";
 import {
   requireAdminOrSupervisor,
@@ -107,6 +108,62 @@ router.get("/:id/retainer", requirePropertyOwnerOrAdmin("id"), async (req, res) 
     return res.json({ propertyId: id, currentBalance, ledger });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Brick 6 — Stewardship visit / monitoring event routes ────────────────────
+
+// POST /api/v2/properties/:propertyId/events — log a visit (owner-or-admin; vendors 403)
+router.post("/:propertyId/events", requirePropertyOwnerOrAdmin("propertyId"), async (req, res) => {
+  const { propertyId } = req.params;
+  const {
+    visitType,
+    severity,
+    note,
+    latitude,
+    longitude,
+    visitAt,
+    payload,
+    goodSamaritan,
+  } = req.body;
+
+  if (!visitType) {
+    return res.status(400).json({ error: `visitType required. Allowed: ${VISIT_TYPES.join(", ")}` });
+  }
+
+  try {
+    const event = await monitoringService.logVisit({
+      propertyId,
+      visitType,
+      severity,
+      note,
+      latitude:      latitude      != null ? Number(latitude)      : null,
+      longitude:     longitude     != null ? Number(longitude)     : null,
+      visitAt,
+      payload,
+      goodSamaritan: goodSamaritan === true || goodSamaritan === "true",
+    });
+    return res.status(201).json(event);
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+// GET /api/v2/properties/:propertyId/events — list with ?from=&to=&type= (owner-or-admin; vendors 403)
+router.get("/:propertyId/events", requirePropertyOwnerOrAdmin("propertyId"), async (req, res) => {
+  const { propertyId } = req.params;
+  const { from, to, type: visitType, limit } = req.query;
+
+  try {
+    const events = await monitoringService.listForProperty(propertyId, {
+      from:      from      as string | undefined,
+      to:        to        as string | undefined,
+      visitType: visitType as string | undefined,
+      limit:     limit     ? Number(limit) : undefined,
+    });
+    return res.json(events);
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 

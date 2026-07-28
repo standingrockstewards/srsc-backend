@@ -242,6 +242,12 @@ export const monitoringEvents = pgTable(
     payload:        text("payload"),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Brick 6 — Stewardship visit columns (added via psql ALTER TABLE)
+    visitType:      text("visit_type"),
+    note:           text("note"),
+    latitude:       numeric("latitude",  { precision: 10, scale: 6 }),
+    longitude:      numeric("longitude", { precision: 10, scale: 6 }),
+    visitAt:        timestamp("visit_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     propertyCreatedIdx: index("monitoring_events_property_created_idx").on(
