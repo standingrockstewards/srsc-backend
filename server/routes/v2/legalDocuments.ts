@@ -1,71 +1,57 @@
+/**
+ * Legal Documents routes — mounted at /api/v2/legal
+ *
+ * GET  /api/v2/legal/:docType/active       — active version for a docType (all authenticated)
+ * GET  /api/v2/legal/:docType/versions     — all versions for a docType (admin only)
+ * POST /api/v2/legal                       — create new version (admin only)
+ *                                            setting active:true atomically deactivates prior
+ */
+
 import { Router } from "express";
 import { z } from "zod";
-import { legalDocumentsRepo } from "../../repositories/legalDocuments";
+import { requireAdminOrSupervisor } from "../../middleware/authV2";
+import { legalDocumentsService } from "../../services/legalDocumentsService";
 
 const router = Router();
 
 const createSchema = z.object({
-  docType:       z.string().min(1),
-  version:       z.string().min(1),
+  docType:       z.string().min(1).max(50),
+  version:       z.string().min(1).max(20),
   bodyMd:        z.string().min(1),
   effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "effectiveDate must be YYYY-MM-DD"),
-  active:        z.boolean().optional(),
+  active:        z.boolean().optional().default(false),
 });
 
-// GET /api/v2/legal-documents — all documents
-router.get("/", async (_req, res) => {
+// GET /api/v2/legal/:docType/active — public to all authenticated users
+router.get("/:docType/active", async (req, res) => {
   try {
-    return res.json(await legalDocumentsRepo.getAll());
+    const doc = await legalDocumentsService.getActive(req.params.docType);
+    if (!doc) {
+      return res.status(404).json({ error: `No active document for type '${req.params.docType}'` });
+    }
+    return res.json(doc);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v2/legal-documents/active/:docType — currently active doc for a type
-router.get("/active/:docType", async (req, res) => {
+// GET /api/v2/legal/:docType/versions — admin/supervisor only
+router.get("/:docType/versions", requireAdminOrSupervisor, async (req, res) => {
   try {
-    const row = await legalDocumentsRepo.getActiveByType(req.params.docType);
-    if (!row) return res.status(404).json({ error: `No active document for type '${req.params.docType}'` });
-    return res.json(row);
+    const docs = await legalDocumentsService.listVersions(req.params.docType);
+    return res.json(docs);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v2/legal-documents/:id
-router.get("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-  try {
-    const row = await legalDocumentsRepo.getById(id);
-    if (!row) return res.status(404).json({ error: "Document not found" });
-    return res.json(row);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/v2/legal-documents — create new version (admin)
-router.post("/", async (req, res) => {
+// POST /api/v2/legal — admin/supervisor only
+router.post("/", requireAdminOrSupervisor, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    return res.status(201).json(await legalDocumentsRepo.create(parsed.data));
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// PATCH /api/v2/legal-documents/:id/active — toggle active flag only
-router.patch("/:id/active", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-  const parsed = z.object({ active: z.boolean() }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  try {
-    const row = await legalDocumentsRepo.setActive(id, parsed.data.active);
-    if (!row) return res.status(404).json({ error: "Document not found" });
-    return res.json(row);
+    const doc = await legalDocumentsService.create(parsed.data);
+    return res.status(201).json(doc);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

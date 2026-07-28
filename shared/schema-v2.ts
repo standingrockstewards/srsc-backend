@@ -171,10 +171,28 @@ export const insertVendorPaymentSchema = createInsertSchema(vendorPayments).omit
 export type InsertVendorPayment = z.infer<typeof insertVendorPaymentSchema>;
 export type VendorPayment = typeof vendorPayments.$inferSelect;
 
+// ─── legal_documents ─────────────────────────────────────────────────────────
+// NOTE: id is text (cuid2) — live DB uses cuid2, not serial.
+// Must be declared BEFORE customer_signatures (which has a FK to this table).
+export const legalDocuments = pgTable("legal_documents", {
+  id:            text("id").primaryKey(),
+  docType:       varchar("doc_type", { length: 50 }).notNull(),
+  version:       varchar("version", { length: 20 }).notNull(),
+  bodyMd:        text("body_md").notNull(),
+  effectiveDate: date("effective_date").notNull(),
+  active:        boolean("active").notNull().default(false),
+});
+
+export const insertLegalDocumentSchema = createInsertSchema(legalDocuments);
+export type InsertLegalDocument = z.infer<typeof insertLegalDocumentSchema>;
+export type LegalDocument = typeof legalDocuments.$inferSelect;
+
 // ─── customer_signatures ─────────────────────────────────────────────────────
 export const customerSignatures = pgTable("customer_signatures", {
   id:               serial("id").primaryKey(),
   customerId:       integer("customer_id").notNull().references(() => customers.id),
+  // FK to legal_documents.id (text/cuid2) — added in Brick 4 via psql ALTER TABLE
+  legalDocumentId:  text("legal_document_id").references(() => legalDocuments.id),
   signatureSvg:     text("signature_svg").notNull(),
   signedDocument:   varchar("signed_document", { length: 100 }).notNull(),
   signedAt:         timestamp("signed_at").notNull().defaultNow(),
@@ -185,18 +203,6 @@ export const customerSignatures = pgTable("customer_signatures", {
 export const insertCustomerSignatureSchema = createInsertSchema(customerSignatures).omit({ id: true, signedAt: true });
 export type InsertCustomerSignature = z.infer<typeof insertCustomerSignatureSchema>;
 export type CustomerSignature = typeof customerSignatures.$inferSelect;
-
-// ─── legal_documents ─────────────────────────────────────────────────────────
-export const legalDocuments = pgTable("legal_documents", {
-  id:            serial("id").primaryKey(),
-  docType:       varchar("doc_type", { length: 50 }).notNull(),
-  version:       varchar("version", { length: 20 }).notNull(),
-  bodyMd:        text("body_md").notNull(),
-  effectiveDate: date("effective_date").notNull(),
-  active:        boolean("active").notNull().default(false),
-});
-
-export type LegalDocument = typeof legalDocuments.$inferSelect;
 
 // ─── monitoring_events (append-only) ───────────────────────────────────────────────────
 // Used by Bricks 8 (Storm Response) and 9 (Operations Map).
