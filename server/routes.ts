@@ -17,6 +17,7 @@ import { dashboardRouter } from "./dashboard-routes";
 import { notificationRouter } from "./notification-routes";
 import { searchRouter } from "./search-routes";
 import { auditRouter } from "./audit-routes";
+import v2Router from "./routes/v2";
 
 export function registerRoutes(httpServer: Server, app: Express) {
   // Initialize permissions table
@@ -40,6 +41,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.use("/api", notificationRouter);
   app.use("/api", searchRouter);
   app.use("/api", auditRouter);
+  // ─── V2 API ──────────────────────────────────────────────────────────────────
+  app.use("/api/v2", v2Router);
   // ─── HEALTH ─────────────────────────────────────────────────────────────────
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", service: "srsc-backend", ts: new Date().toISOString() });
