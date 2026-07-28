@@ -1,5 +1,6 @@
 import "dotenv/config";
 import cors from "cors";
+import session from "express-session";
 import express, { Response, NextFunction } from 'express';
 import type { Request } from 'express';
 import { registerRoutes } from "./routes";
@@ -33,6 +34,23 @@ app.use(
       callback(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
+  })
+);
+
+// ─── Session middleware (v2 auth) ──────────────────────────────────────────────
+const SESSION_SECRET = process.env.SESSION_SECRET || "srsc-v2-dev-secret-change-in-prod";
+app.use(
+  session({
+    name: "__Host-srsc-v2",
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 8 * 60 * 60 * 1000, // 8 hours
+    },
   })
 );
 

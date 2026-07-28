@@ -1,24 +1,26 @@
 import { Router } from "express";
-import { z } from "zod";
 import { customersRepo } from "../../repositories/customers";
 import { insertCustomerSchema } from "../../../shared/schema-v2";
+import {
+  requireAdminOrSupervisor,
+  requireNotVendor,
+  requireSelfOrAdmin,
+} from "../../middleware/authV2";
 
 const router = Router();
-
 const patchSchema = insertCustomerSchema.partial();
 
-// GET /api/v2/customers
-router.get("/", async (_req, res) => {
+// GET /api/v2/customers — admin/supervisor only (full list)
+router.get("/", requireAdminOrSupervisor, async (_req, res) => {
   try {
-    const rows = await customersRepo.getAll();
-    return res.json(rows);
+    return res.json(await customersRepo.getAll());
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v2/customers/:id
-router.get("/:id", async (req, res) => {
+// GET /api/v2/customers/:id — self or admin
+router.get("/:id", requireSelfOrAdmin("id"), async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -30,8 +32,8 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST /api/v2/customers
-router.post("/", async (req, res) => {
+// POST /api/v2/customers — admin only
+router.post("/", requireAdminOrSupervisor, async (req, res) => {
   const parsed = insertCustomerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
@@ -42,8 +44,8 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PATCH /api/v2/customers/:id
-router.patch("/:id", async (req, res) => {
+// PATCH /api/v2/customers/:id — self or admin
+router.patch("/:id", requireSelfOrAdmin("id"), async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   const parsed = patchSchema.safeParse(req.body);
@@ -57,8 +59,8 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/v2/customers/:id
-router.delete("/:id", async (req, res) => {
+// DELETE /api/v2/customers/:id — admin only
+router.delete("/:id", requireAdminOrSupervisor, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   try {
