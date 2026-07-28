@@ -20,9 +20,10 @@ export const creditSourceEnum = pgEnum("credit_source", [
   "referral", "refund", "adjustment",
 ]);
 
-export const retainerTypeEnum = pgEnum("retainer_type", [
-  "deposit", "debit", "adjustment",
-]);
+// retainer_type is plain text in the live DB (no pg enum).
+// Allowed values enforced in TypeScript only.
+export const RETAINER_ENTRY_TYPES = ["topup", "charge", "credit_applied", "adjustment"] as const;
+export type RetainerEntryType = typeof RETAINER_ENTRY_TYPES[number];
 
 export const vendorPaymentStatusEnum = pgEnum("vendor_payment_status", [
   "pending", "batched", "paid", "failed",
@@ -62,6 +63,8 @@ export const propertiesV2 = pgTable("properties", {
   latitude:                 numeric("latitude", { precision: 9, scale: 6 }),
   longitude:                numeric("longitude", { precision: 9, scale: 6 }),
   nearestShorelineMarker:   text("nearest_shoreline_marker"),
+  // Brick 5 — Dunning state (mutable, last-write-wins; transitions logged in billing_state_log)
+  billingState:             text("billing_state").notNull().default("current"), // 'current' | 'grace' | 'delinquent'
   createdAt:                timestamp("created_at").notNull().defaultNow(),
   updatedAt:                timestamp("updated_at").notNull().defaultNow(),
 });
@@ -74,7 +77,7 @@ export type PropertyV2 = typeof propertiesV2.$inferSelect;
 export const retainerLedger = pgTable("retainer_ledger", {
   id:           serial("id").primaryKey(),
   propertyId:   integer("property_id").notNull().references(() => propertiesV2.id),
-  type:         retainerTypeEnum("type").notNull(),
+  type:         text("type").notNull(), // topup | charge | credit_applied | adjustment (enforced in TS)
   amount:       decimal("amount", { precision: 10, scale: 2 }).notNull(),
   balanceAfter: decimal("balance_after", { precision: 10, scale: 2 }).notNull(),
   note:         text("note"),
@@ -84,6 +87,25 @@ export const retainerLedger = pgTable("retainer_ledger", {
 export const insertRetainerLedgerSchema = createInsertSchema(retainerLedger).omit({ id: true, createdAt: true });
 export type InsertRetainerLedger = z.infer<typeof insertRetainerLedgerSchema>;
 export type RetainerLedger = typeof retainerLedger.$inferSelect;
+
+// ─── billing_state_log (append-only, Brick 5) ────────────────────────────────────
+// id is text (nanoid) — live DB uses text PK per psql migration.
+export const billingStateLog = pgTable(
+  "billing_state_log",
+  {
+    id:         text("id").primaryKey(),
+    propertyId: integer("property_id").notNull().references(() => propertiesV2.id),
+    fromState:  text("from_state").notNull(),
+    toState:    text("to_state").notNull(),
+    reason:     text("reason"),
+    createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    propCreatedIdx: index("billing_state_log_property_created_idx").on(t.propertyId, t.createdAt),
+  }),
+);
+
+export type BillingStateLog = typeof billingStateLog.$inferSelect;
 
 // ─── referrals ────────────────────────────────────────────────────────────────
 export const referrals = pgTable("referrals", {

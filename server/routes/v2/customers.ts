@@ -6,6 +6,7 @@ import {
   requireNotVendor,
   requireSelfOrAdmin,
 } from "../../middleware/authV2";
+import { billingService } from "../../services/billingService";
 
 const router = Router();
 const patchSchema = insertCustomerSchema.partial();
@@ -68,6 +69,21 @@ router.delete("/:id", requireAdminOrSupervisor, async (req, res) => {
     return res.status(204).send();
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/v2/customers/:id/statement-summary?month=YYYY-MM  (Brick 5)
+router.get("/:id/statement-summary", requireSelfOrAdmin("id"), async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+  const { month } = req.query;
+  if (!month || !/^\d{4}-\d{2}$/.test(month as string)) {
+    return res.status(400).json({ error: "month query param required (YYYY-MM)" });
+  }
+  try {
+    return res.json(await billingService.customerStatementSummary(id, month as string));
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 

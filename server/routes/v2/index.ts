@@ -18,6 +18,8 @@ import vendorsRouter           from "./vendors";
 import legalDocumentsRouter    from "./legalDocuments";
 import customerSignaturesRouter from "./customerSignatures";
 import monitoringEventsRouter  from "./monitoringEvents";
+import retainerRouter          from "./retainer";
+import creditsRouter           from "./credits";
 
 const v2 = Router();
 
@@ -35,5 +37,7 @@ v2.use("/vendors",           vendorsRouter);             // CRUD + reviews + sco
 v2.use("/legal",             legalDocumentsRouter);      // Brick 4: GET :docType/active, GET :docType/versions, POST
 v2.use("/signatures",        customerSignaturesRouter);  // Brick 4: POST capture, GET list (ownership gated)
 v2.use("/monitoring-events", monitoringEventsRouter);    // append-only events + acknowledge
+v2.use("/retainer",          retainerRouter);            // Brick 5: ledger, balance, low-balance, statements, dunning
+v2.use("/credits",           creditsRouter);             // Brick 5: issue + apply credits
 
 export default v2;
