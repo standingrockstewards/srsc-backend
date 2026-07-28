@@ -1,5 +1,4 @@
 import { eq, desc } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { db } from "../db";
 import { billingStateLog, propertiesV2 } from "../../shared/schema-v2";
 
@@ -7,21 +6,19 @@ export type BillingState = "current" | "grace" | "delinquent";
 
 export const billingStateLogRepo = {
   /**
-   * Append a state transition log entry AND update properties.billing_state
-   * in the same Drizzle transaction.
+   * Append a state transition AND update properties.billing_state atomically.
+   * Both propertyId and the log id are text.
    */
   async transition(
-    propertyId: number,
+    propertyId: string,
     fromState: BillingState,
     toState: BillingState,
     reason?: string,
   ) {
-    const id = nanoid();
-    // Run both writes together
     const [logRow] = await db.transaction(async (tx) => {
       const inserted = await tx
         .insert(billingStateLog)
-        .values({ id, propertyId, fromState, toState, reason: reason ?? null })
+        .values({ propertyId, fromState, toState, reason: reason ?? null })
         .returning();
 
       await tx
@@ -34,8 +31,7 @@ export const billingStateLogRepo = {
     return logRow;
   },
 
-  /** Full transition history for a property, newest-first */
-  async listByProperty(propertyId: number) {
+  async listByProperty(propertyId: string) {
     return db
       .select()
       .from(billingStateLog)

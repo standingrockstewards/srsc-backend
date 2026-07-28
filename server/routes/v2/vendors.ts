@@ -1,25 +1,13 @@
 import { Router } from "express";
 import { vendorsRepo } from "../../repositories/vendors";
 import { vendorReviewsRepo } from "../../repositories/vendorReviews";
-import { vendorScoringService } from "../../services/vendorScoringService";
 import { insertVendorSchema, insertVendorReviewSchema } from "../../../shared/schema-v2";
-import {
-  requireAdminOrSupervisor,
-  requireNotVendor,
-  requireVendorSelfOrAdmin,
-} from "../../middleware/authV2";
+import { requireAdminOrSupervisor, requireNotVendor } from "../../middleware/authV2";
 
 const router = Router();
-const patchVendorSchema = insertVendorSchema.partial();
 
-// ── Vendors ──────────────────────────────────────────────────────────────────
-
-// GET /api/v2/vendors — admin/supervisor; clients blocked; vendors see list (no client data)
-router.get("/", async (req, res) => {
-  // Vendors can see the vendor list (for their own reference); clients cannot
-  if (req.v2Role === "client") {
-    return res.status(403).json({ error: "Forbidden — clients may not access vendor records directly" });
-  }
+// GET /api/v2/vendors
+router.get("/", requireNotVendor, async (_req, res) => {
   try {
     return res.json(await vendorsRepo.getAll());
   } catch (err: any) {
@@ -27,10 +15,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /api/v2/vendors/:id — admin/supervisor or the vendor themselves
-router.get("/:id", requireVendorSelfOrAdmin("id"), async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+// GET /api/v2/vendors/:id
+router.get("/:id", requireNotVendor, async (req, res) => {
+  const { id } = req.params;
   try {
     const row = await vendorsRepo.getById(id);
     if (!row) return res.status(404).json({ error: "Vendor not found" });
@@ -40,7 +27,7 @@ router.get("/:id", requireVendorSelfOrAdmin("id"), async (req, res) => {
   }
 });
 
-// POST /api/v2/vendors — admin only
+// POST /api/v2/vendors
 router.post("/", requireAdminOrSupervisor, async (req, res) => {
   const parsed = insertVendorSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -51,11 +38,10 @@ router.post("/", requireAdminOrSupervisor, async (req, res) => {
   }
 });
 
-// PATCH /api/v2/vendors/:id — admin only
+// PATCH /api/v2/vendors/:id
 router.patch("/:id", requireAdminOrSupervisor, async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-  const parsed = patchVendorSchema.safeParse(req.body);
+  const { id } = req.params;
+  const parsed = insertVendorSchema.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     const row = await vendorsRepo.update(id, parsed.data);
@@ -66,44 +52,36 @@ router.patch("/:id", requireAdminOrSupervisor, async (req, res) => {
   }
 });
 
-// GET /api/v2/vendors/:id/scorecard — public (no ownership restriction, gated by min-reviews)
-// Clients can see the scorecard (score only, no identity leak); vendors/admin also ok
-router.get("/:id/scorecard", async (req, res) => {
-  // Preserve middleman: clients see score + breakdown, but NOT vendor contact details
-  // (scorecard endpoint returns only scoring data, not email/phone — safe to expose)
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+// DELETE /api/v2/vendors/:id
+router.delete("/:id", requireAdminOrSupervisor, async (req, res) => {
+  const { id } = req.params;
   try {
-    const scorecard = await vendorScoringService.scorecard(id);
-    if (!scorecard) return res.status(404).json({ error: "Vendor not found" });
-    return res.json(scorecard);
+    await vendorsRepo.delete(id);
+    return res.status(204).send();
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// ── Vendor Reviews ────────────────────────────────────────────────────────────
-
-// GET /api/v2/vendors/reviews/list?vendorId=N — admin/supervisor; client blocked
-router.get("/reviews/list", requireAdminOrSupervisor, async (req, res) => {
-  const { vendorId } = req.query;
-  if (!vendorId) return res.status(400).json({ error: "vendorId query param required" });
-  const id = parseInt(vendorId as string);
-  if (isNaN(id)) return res.status(400).json({ error: "Invalid vendorId" });
+// GET /api/v2/vendors/:id/reviews
+router.get("/:id/reviews", requireNotVendor, async (req, res) => {
+  const { id } = req.params;
   try {
-    return res.json(await vendorReviewsRepo.listByVendor(id));
+    const agg   = await vendorReviewsRepo.getAggregateForVendor(id);
+    const items = await vendorReviewsRepo.listByVendor(id);
+    return res.json({ aggregate: agg, reviews: items });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/v2/vendors/reviews — admin submits reviews (on behalf of clients in v2)
-// Vendors cannot review themselves; clients submit via admin-mediated flow
-router.post("/reviews", requireAdminOrSupervisor, async (req, res) => {
-  const parsed = insertVendorReviewSchema.safeParse(req.body);
+// POST /api/v2/vendors/:id/reviews
+router.post("/:id/reviews", requireNotVendor, async (req, res) => {
+  const { id: vendorId } = req.params;
+  const parsed = insertVendorReviewSchema.safeParse({ ...req.body, vendorId });
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    return res.status(201).json(await vendorScoringService.submitReview(parsed.data));
+    return res.status(201).json(await vendorReviewsRepo.create(parsed.data));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

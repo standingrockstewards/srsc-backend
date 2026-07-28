@@ -3,16 +3,7 @@ import { db } from "../db";
 import { vendorPayments, type InsertVendorPayment } from "../../shared/schema-v2";
 
 export const vendorPaymentsRepo = {
-  async getAll() {
-    return db.select().from(vendorPayments).orderBy(vendorPayments.createdAt);
-  },
-
-  async getById(id: number) {
-    const [row] = await db.select().from(vendorPayments).where(eq(vendorPayments.id, id));
-    return row ?? null;
-  },
-
-  async listByVendor(vendorId: number) {
+  async listByVendor(vendorId: string) {
     return db
       .select()
       .from(vendorPayments)
@@ -25,16 +16,12 @@ export const vendorPaymentsRepo = {
     return row;
   },
 
-  async update(id: number, data: Partial<InsertVendorPayment>) {
+  async update(id: string, data: Partial<InsertVendorPayment>) {
     const [row] = await db
       .update(vendorPayments)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(vendorPayments.id, id))
       .returning();
     return row ?? null;
-  },
-
-  async delete(id: number) {
-    await db.delete(vendorPayments).where(eq(vendorPayments.id, id));
   },
 };

@@ -7,7 +7,7 @@ export const customersRepo = {
     return db.select().from(customers).orderBy(customers.createdAt);
   },
 
-  async getById(id: number) {
+  async getById(id: string) {
     const [row] = await db.select().from(customers).where(eq(customers.id, id));
     return row ?? null;
   },
@@ -22,7 +22,7 @@ export const customersRepo = {
     return row;
   },
 
-  async update(id: number, data: Partial<InsertCustomer>) {
+  async update(id: string, data: Partial<InsertCustomer>) {
     const [row] = await db
       .update(customers)
       .set({ ...data, updatedAt: new Date() })
@@ -31,7 +31,7 @@ export const customersRepo = {
     return row ?? null;
   },
 
-  async delete(id: number) {
+  async delete(id: string) {
     await db.delete(customers).where(eq(customers.id, id));
   },
 };

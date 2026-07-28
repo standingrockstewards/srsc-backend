@@ -7,8 +7,13 @@ export const vendorsRepo = {
     return db.select().from(vendors).orderBy(vendors.createdAt);
   },
 
-  async getById(id: number) {
+  async getById(id: string) {
     const [row] = await db.select().from(vendors).where(eq(vendors.id, id));
+    return row ?? null;
+  },
+
+  async getByEmail(email: string) {
+    const [row] = await db.select().from(vendors).where(eq(vendors.email, email));
     return row ?? null;
   },
 
@@ -17,7 +22,7 @@ export const vendorsRepo = {
     return row;
   },
 
-  async update(id: number, data: Partial<InsertVendor>) {
+  async update(id: string, data: Partial<InsertVendor>) {
     const [row] = await db
       .update(vendors)
       .set({ ...data, updatedAt: new Date() })
@@ -26,17 +31,16 @@ export const vendorsRepo = {
     return row ?? null;
   },
 
-  /** Internal — used by scoring service to update score + count atomically */
-  async updateScore(id: number, publicScore: string, reviewCount: number) {
+  async delete(id: string) {
+    await db.delete(vendors).where(eq(vendors.id, id));
+  },
+
+  async updateScore(vendorId: string, publicScore: string, reviewCount: number) {
     const [row] = await db
       .update(vendors)
       .set({ publicScore, reviewCount, updatedAt: new Date() })
-      .where(eq(vendors.id, id))
+      .where(eq(vendors.id, vendorId))
       .returning();
     return row ?? null;
-  },
-
-  async delete(id: number) {
-    await db.delete(vendors).where(eq(vendors.id, id));
   },
 };

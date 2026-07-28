@@ -1,35 +1,30 @@
 /**
- * server/services/billingService.ts  (Brick 5)
+ * server/services/billingService.ts  (Brick 5 — text-ID rewrite)
  *
- * Per-property monthly statements + customer-level roll-up summary.
- * Each property ALWAYS has its own statement.
- * The customer summary is a top-level overview — never merges property ledgers.
+ * All customerId / propertyId values are text (nanoid/cuid2).
  */
 
-import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { propertiesV2 } from "../../shared/schema-v2";
-import { retainerLedgerRepo } from "../repositories/retainerLedger";
 import { propertiesRepo } from "../repositories/properties";
+import { retainerLedgerRepo } from "../repositories/retainerLedger";
 
 export interface PropertyStatement {
-  propertyId:      number;
-  nickname:        string;
-  month:           string;           // YYYY-MM
-  openingBalance:  string;
-  closingBalance:  string;
-  totalCharges:    string;
-  totalTopups:     string;
-  totalCredits:    string;
+  propertyId:       string;
+  nickname:         string;
+  month:            string;
+  openingBalance:   string;
+  closingBalance:   string;
+  totalCharges:     string;
+  totalTopups:      string;
+  totalCredits:     string;
   totalAdjustments: string;
-  entries:         any[];
+  entries:          any[];
 }
 
 export interface CustomerStatementSummary {
-  customerId: number;
+  customerId: string;
   month:      string;
   properties: Array<{
-    propertyId:     number;
+    propertyId:     string;
     nickname:       string;
     billingState:   string;
     openingBalance: string;
@@ -45,9 +40,8 @@ export interface CustomerStatementSummary {
 export const billingService = {
   /**
    * Per-property monthly statement.
-   * Returns all ledger entries for the month with opening + closing balances.
    */
-  async propertyStatement(propertyId: number, month: string): Promise<PropertyStatement> {
+  async propertyStatement(propertyId: string, month: string): Promise<PropertyStatement> {
     const property = await propertiesRepo.getById(propertyId);
     if (!property) throw Object.assign(new Error("Property not found"), { status: 404 });
 
@@ -63,10 +57,10 @@ export const billingService = {
 
     for (const e of entries) {
       const amt = parseFloat(e.amount);
-      if (e.type === "charge")         totalCharges     += amt;
-      else if (e.type === "topup")     totalTopups      += amt;
-      else if (e.type === "credit_applied") totalCredits += amt;
-      else if (e.type === "adjustment") totalAdjustments += amt;
+      if (e.type === "charge")           totalCharges     += amt;
+      else if (e.type === "topup")       totalTopups      += amt;
+      else if (e.type === "credit_applied") totalCredits  += amt;
+      else if (e.type === "adjustment")  totalAdjustments += amt;
     }
 
     const closingBalance = entries.length > 0
@@ -75,7 +69,7 @@ export const billingService = {
 
     return {
       propertyId,
-      nickname:        property.nickname,
+      nickname:         property.nickname,
       month,
       openingBalance,
       closingBalance,
@@ -88,10 +82,10 @@ export const billingService = {
   },
 
   /**
-   * Customer-level roll-up: one row per property, totals at the top level.
-   * Never merges individual property ledgers — each property is always distinct.
+   * Customer-level roll-up — one row per property, totals at the top level.
+   * Never merges property ledgers — each property is always distinct.
    */
-  async customerStatementSummary(customerId: number, month: string): Promise<CustomerStatementSummary> {
+  async customerStatementSummary(customerId: string, month: string): Promise<CustomerStatementSummary> {
     const properties = await propertiesRepo.listByCustomer(customerId);
 
     let totalOpeningBalance  = 0;
@@ -107,7 +101,7 @@ export const billingService = {
         return {
           propertyId:     p.id,
           nickname:       p.nickname,
-          billingState:   p.billingState,
+          billingState:   p.billingState ?? "current",
           openingBalance: stmt.openingBalance,
           closingBalance: stmt.closingBalance,
           totalCharges:   stmt.totalCharges,

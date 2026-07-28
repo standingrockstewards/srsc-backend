@@ -28,31 +28,22 @@ export const legalDocumentsRepo = {
       .orderBy(legalDocuments.effectiveDate);
   },
 
-  /**
-   * Insert a new document version.
-   * If active=true, atomically deactivates the previous active version of the
-   * same docType in the same transaction — guaranteeing at most one active per docType.
-   */
-  async createWithAtomicActivate(data: InsertLegalDocument): Promise<typeof legalDocuments.$inferSelect> {
+  async createWithAtomicActivate(data: InsertLegalDocument & { id: string }): Promise<typeof legalDocuments.$inferSelect> {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-
-      // If the new doc is being set active, deactivate existing active version(s)
       if (data.active) {
         await client.query(
           `UPDATE legal_documents SET active = false WHERE doc_type = $1 AND active = true`,
           [data.docType],
         );
       }
-
-      const result = await client.query<typeof legalDocuments.$inferSelect>(
+      const result = await client.query(
         `INSERT INTO legal_documents (id, doc_type, version, body_md, effective_date, active)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
         [data.id, data.docType, data.version, data.bodyMd, data.effectiveDate, data.active ?? false],
       );
-
       await client.query("COMMIT");
       return result.rows[0];
     } catch (err) {
@@ -63,7 +54,6 @@ export const legalDocumentsRepo = {
     }
   },
 
-  /** Toggle active flag only — does NOT enforce single-active constraint; use createWithAtomicActivate for new docs */
   async setActive(id: string, active: boolean) {
     const [row] = await db
       .update(legalDocuments)

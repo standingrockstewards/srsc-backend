@@ -7,12 +7,12 @@ export const propertiesRepo = {
     return db.select().from(propertiesV2).orderBy(propertiesV2.createdAt);
   },
 
-  async getById(id: number) {
+  async getById(id: string) {
     const [row] = await db.select().from(propertiesV2).where(eq(propertiesV2.id, id));
     return row ?? null;
   },
 
-  async listByCustomer(customerId: number) {
+  async listByCustomer(customerId: string) {
     return db
       .select()
       .from(propertiesV2)
@@ -25,7 +25,7 @@ export const propertiesRepo = {
     return row;
   },
 
-  async update(id: number, data: Partial<InsertPropertyV2>) {
+  async update(id: string, data: Partial<InsertPropertyV2>) {
     const [row] = await db
       .update(propertiesV2)
       .set({ ...data, updatedAt: new Date() })
@@ -34,7 +34,7 @@ export const propertiesRepo = {
     return row ?? null;
   },
 
-  async delete(id: number) {
+  async delete(id: string) {
     await db.delete(propertiesV2).where(eq(propertiesV2.id, id));
   },
 };

@@ -2,26 +2,23 @@
  * Vendor scoring service.
  * On every new review: recompute running average of `overall` and bump reviewCount.
  * publicScore is only exposed when reviewCount >= minReviewsForDisplay.
+ * All vendor IDs are text (nanoid/cuid2).
  */
 
-import { eq } from "drizzle-orm";
+import { eq, avg, count } from "drizzle-orm";
 import { db } from "../db";
 import { vendorReviews, vendors } from "../../shared/schema-v2";
 import { vendorsRepo } from "../repositories/vendors";
 import { vendorReviewsRepo } from "../repositories/vendorReviews";
 import type { InsertVendorReview } from "../../shared/schema-v2";
-import { avg, count } from "drizzle-orm";
 
 export const vendorScoringService = {
   /**
    * Submit a review and recompute the vendor's running average + count.
-   * Returns the saved review.
    */
   async submitReview(data: InsertVendorReview) {
-    // Persist the review first
     const review = await vendorReviewsRepo.create(data);
 
-    // Recompute average overall from all reviews for this vendor
     const [agg] = await db
       .select({
         avgScore: avg(vendorReviews.overall),
@@ -41,19 +38,15 @@ export const vendorScoringService = {
   },
 
   /**
-   * Return public scorecard for a vendor.
-   * Score is gated: returns null when reviewCount < minReviewsForDisplay.
+   * Return public scorecard. Score is gated: returns null when reviewCount < minReviewsForDisplay.
    */
-  async scorecard(vendorId: number) {
+  async scorecard(vendorId: string) {
     const vendor = await vendorsRepo.getById(vendorId);
     if (!vendor) return null;
 
-    const reviews = await vendorReviewsRepo.listByVendor(vendorId);
+    const reviews      = await vendorReviewsRepo.listByVendor(vendorId);
+    const scoreVisible = vendor.reviewCount >= (vendor.minReviewsForDisplay ?? 3);
 
-    const scoreVisible =
-      vendor.reviewCount >= (vendor.minReviewsForDisplay ?? 3);
-
-    // Averages per dimension
     const dims = reviews.length
       ? {
           quality:       avg4(reviews.map((r) => r.ratingQuality)),
@@ -65,12 +58,12 @@ export const vendorScoringService = {
 
     return {
       vendorId,
-      name: vendor.name,
-      reviewCount: vendor.reviewCount,
-      publicScore: scoreVisible ? vendor.publicScore : null,
+      name:                 vendor.name,
+      reviewCount:          vendor.reviewCount,
+      publicScore:          scoreVisible ? vendor.publicScore : null,
       scoreVisible,
       minReviewsForDisplay: vendor.minReviewsForDisplay,
-      dimensionAverages: scoreVisible ? dims : null,
+      dimensionAverages:    scoreVisible ? dims : null,
     };
   },
 };

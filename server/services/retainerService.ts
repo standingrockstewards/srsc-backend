@@ -1,14 +1,8 @@
 /**
- * server/services/retainerService.ts  (Brick 5 rewrite)
+ * server/services/retainerService.ts  (Brick 5 — text-ID rewrite)
  *
- * Per-property retainer ledger with:
- *  - Correct running balance (server-computed, never trusted from client)
- *  - Discount tier applied to charges
- *  - Low-balance flag after every charge
- *  - Dunning state transitions (current → grace → delinquent) logged append-only
- *
- * Grace window: configurable via DUNNING_GRACE_DAYS env var (default 7).
- * All money as decimal strings; never use float for storage.
+ * All propertyId values are text (nanoid/cuid2) throughout.
+ * No parseInt, no number cast on any ID.
  */
 
 import { eq } from "drizzle-orm";
@@ -16,7 +10,7 @@ import { db } from "../db";
 import { propertiesV2, type RetainerEntryType } from "../../shared/schema-v2";
 import { retainerLedgerRepo } from "../repositories/retainerLedger";
 import { billingStateLogRepo, type BillingState } from "../repositories/billingStateLog";
-import { deriveDiscountPct } from "./discountService";
+import { paymentProvider } from "./paymentProvider";
 
 const GRACE_DAYS = parseInt(process.env.DUNNING_GRACE_DAYS ?? "7", 10);
 
@@ -32,21 +26,19 @@ function isLowBalance(balance: string, target: string, alertPct: number): boolea
 }
 
 // ── Dunning evaluator ─────────────────────────────────────────────────────────
-/**
- * After any balance-changing event, re-evaluate dunning state and log if changed.
- * Logic:
- *   balance >= threshold      → current
- *   balance <  threshold
- *     AND updatedAt is within grace window  → grace
- *     AND updatedAt is outside grace window → delinquent
- */
+
 async function evaluateDunning(
-  propertyId: number,
+  propertyId: string,                           // text ID
   newBalance: string,
-  property: { targetRetainerAmount: string; lowBalanceAlertPct: number; billingState: string; updatedAt: Date },
+  property: {
+    targetRetainerAmount: string;
+    lowBalanceAlertPct: number;
+    billingState: string;
+    updatedAt: Date;
+  },
 ): Promise<void> {
-  const threshold = parseFloat(property.targetRetainerAmount) * (property.lowBalanceAlertPct / 100);
-  const balance   = parseFloat(newBalance);
+  const threshold    = parseFloat(property.targetRetainerAmount) * (property.lowBalanceAlertPct / 100);
+  const balance      = parseFloat(newBalance);
   const currentState = property.billingState as BillingState;
 
   let targetState: BillingState;
@@ -71,10 +63,10 @@ async function evaluateDunning(
 
 export const retainerService = {
   /**
-   * Post a topup (direct deposit / Stripe top-up).
+   * Post a topup (direct deposit).
    * discountTierPct does NOT reduce top-ups — only charges.
    */
-  async topup(propertyId: number, amount: string, note?: string) {
+  async topup(propertyId: string, amount: string, note?: string) {
     const entry = await retainerLedgerRepo.recordEntry(propertyId, "topup", amount, note);
     const [property] = await db.select().from(propertiesV2).where(eq(propertiesV2.id, propertyId));
     if (property) await evaluateDunning(propertyId, entry.balanceAfter, property);
@@ -83,14 +75,9 @@ export const retainerService = {
 
   /**
    * Post a service charge.
-   * Amount is reduced by the property's current discountTierPct before posting.
-   * After posting, evaluates low-balance flag and dunning state.
+   * Amount is reduced by the property's discountTierPct before posting.
    */
-  async charge(
-    propertyId: number,
-    grossAmount: string,
-    note?: string,
-  ) {
+  async charge(propertyId: string, grossAmount: string, note?: string) {
     const [property] = await db.select().from(propertiesV2).where(eq(propertiesV2.id, propertyId));
     if (!property) throw Object.assign(new Error("Property not found"), { status: 404 });
 
@@ -102,10 +89,9 @@ export const retainerService = {
   },
 
   /**
-   * Post a manual adjustment (sets absolute balance).
-   * Admin only — no discount applied.
+   * Post a manual adjustment (sets absolute balance). Admin only.
    */
-  async adjustment(propertyId: number, newAbsoluteBalance: string, note?: string) {
+  async adjustment(propertyId: string, newAbsoluteBalance: string, note?: string) {
     const entry = await retainerLedgerRepo.recordEntry(propertyId, "adjustment", newAbsoluteBalance, note);
     const [property] = await db.select().from(propertiesV2).where(eq(propertiesV2.id, propertyId));
     if (property) await evaluateDunning(propertyId, entry.balanceAfter, property);
@@ -113,19 +99,42 @@ export const retainerService = {
   },
 
   /** Current balance = balanceAfter of the most recent ledger entry, or "0.00" */
-  async currentBalance(propertyId: number): Promise<string> {
+  async currentBalance(propertyId: string): Promise<string> {
     const latest = await retainerLedgerRepo.getLatest(propertyId);
     return latest?.balanceAfter ?? "0.00";
   },
 
   /** Full ledger history, chronological */
-  async ledger(propertyId: number) {
+  async ledger(propertyId: string) {
     return retainerLedgerRepo.listByProperty(propertyId);
+  },
+
+  /** Current dunning state and log for a property */
+  async dunningState(propertyId: string) {
+    const [property] = await db.select().from(propertiesV2).where(eq(propertiesV2.id, propertyId));
+    if (!property) throw Object.assign(new Error("Property not found"), { status: 404 });
+    const log = await billingStateLogRepo.listByProperty(propertyId);
+    return {
+      propertyId,
+      billingState: property.billingState,
+      stateHistory: log,
+    };
+  },
+
+  /**
+   * Top-up via Stripe (stub). Charges the payment method, then posts the topup entry.
+   */
+  async topupViaPayment(propertyId: string, amount: string, paymentMethodId: string) {
+    const charge = await paymentProvider.chargePaymentMethod(paymentMethodId, amount);
+    if (charge.status !== "succeeded") {
+      throw Object.assign(new Error(`Payment failed: ${charge.status}`), { status: 402 });
+    }
+    const entry = await retainerService.topup(propertyId, amount, `Stripe payment ${charge.id}`);
+    return { charge, entry };
   },
 
   /**
    * All active properties whose current balance is below their low-balance threshold.
-   * Returned with property metadata for the admin low-balance list endpoint.
    */
   async lowBalanceProperties() {
     const props = await db.select().from(propertiesV2).where(eq(propertiesV2.active, true));
