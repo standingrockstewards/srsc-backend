@@ -345,3 +345,33 @@ export const insertStewardshipJobSchema = createInsertSchema(stewardshipJobs).om
 });
 export type InsertStewardshipJob = z.infer<typeof insertStewardshipJobSchema>;
 export type StewardshipJob = typeof stewardshipJobs.$inferSelect;
+
+// ─── Brick 10e-prereq: Shoreline Markers ─────────────────────────────────────
+// Corps-of-Engineers / lake-authority marker designations with real coordinates.
+// Used by MapView nearest-marker logic and emergency-response dispatch.
+// latitude/longitude match the same numeric(9,6) convention as propertiesV2.
+// lake column is future-multi-lake ready (default 'Lake Eufaula').
+
+export const shorelineMarkers = pgTable(
+  "shoreline_markers",
+  {
+    id:           id(),
+    markerNumber: text("marker_number").notNull(),   // Corps designation, e.g. "12", "12A"
+    latitude:     numeric("latitude",  { precision: 9, scale: 6 }).notNull(),
+    longitude:    numeric("longitude", { precision: 9, scale: 6 }).notNull(),
+    description:  text("description"),               // optional cove/landmark note
+    lake:         text("lake").notNull().default("Lake Eufaula"),
+    createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    markerNumberIdx: index("shoreline_markers_marker_number_idx").on(t.markerNumber),
+    lakeIdx:         index("shoreline_markers_lake_idx").on(t.lake),
+  }),
+);
+
+export const insertShorelineMarkerSchema = createInsertSchema(shorelineMarkers).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertShorelineMarker = z.infer<typeof insertShorelineMarkerSchema>;
+export type ShorelineMarker = typeof shorelineMarkers.$inferSelect;
