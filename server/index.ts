@@ -24,6 +24,8 @@ const allowedOrigins = [
   "https://standingrockstewards.com",
   "https://www.standingrockstewards.com",
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  // Vite dev server — only in non-production
+  ...(process.env.NODE_ENV !== "production" ? ["http://localhost:5173"] : []),
 ];
 app.use(
   cors({
@@ -47,8 +49,10 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      // SameSite=None required for cross-origin cookie (client on different origin).
+      // Secure must always be true when SameSite=None.
+      secure: true,
+      sameSite: "none",
       maxAge: 8 * 60 * 60 * 1000, // 8 hours
     },
   })
