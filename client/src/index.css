@@ -1731,3 +1731,231 @@ a:hover {
   }
 }
 
+
+/* ── Brick 10f: 2FA components ───────────────────────────────────────────────── */
+
+/* Page wrapper */
+.tfa-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg, #0d1117);
+  padding: 1.5rem;
+}
+
+/* Card */
+.tfa-card {
+  background: var(--color-surface, #161b22);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 12px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Titles */
+.tfa-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text, #e6edf3);
+  margin: 0;
+}
+.tfa-title--success { color: var(--color-success, #3fb950); }
+
+.tfa-body {
+  color: var(--color-text-muted, #8b949e);
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* QR code */
+.tfa-qr-wrapper {
+  display: flex;
+  justify-content: center;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.75rem;
+  width: fit-content;
+  margin: 0 auto;
+}
+.tfa-qr { display: block; }
+
+/* Manual secret */
+.tfa-manual-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.tfa-manual-label { font-size: 0.8rem; color: var(--color-text-muted, #8b949e); }
+.tfa-manual-secret {
+  font-family: monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  background: var(--color-bg, #0d1117);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text, #e6edf3);
+  word-break: break-all;
+  user-select: all;
+}
+
+/* Step labels */
+.tfa-step-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #8b949e);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tfa-step-label--spaced { margin-top: 0.5rem; }
+
+/* Code input */
+.tfa-code-input {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  font-size: 1.5rem;
+  font-family: monospace;
+  letter-spacing: 0.35em;
+  text-align: center;
+  background: var(--color-bg, #0d1117);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 8px;
+  color: var(--color-text, #e6edf3);
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.tfa-code-input:focus {
+  outline: none;
+  border-color: var(--color-accent, #58a6ff);
+}
+
+/* Buttons */
+.tfa-btn {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+.tfa-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tfa-btn--primary {
+  background: var(--color-accent, #238636);
+  color: #fff;
+}
+.tfa-btn--primary:hover:not(:disabled) { opacity: 0.9; }
+.tfa-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--color-border, #30363d);
+  color: var(--color-text-muted, #8b949e);
+}
+.tfa-btn--ghost:hover:not(:disabled) {
+  border-color: var(--color-text-muted, #8b949e);
+  color: var(--color-text, #e6edf3);
+}
+
+/* Error */
+.tfa-error {
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.875rem;
+  color: #f85149;
+}
+
+/* Policy note */
+.tfa-policy-note {
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #8b949e);
+}
+
+/* Backup codes */
+.tfa-backup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.tfa-backup-header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #f85149;
+}
+.tfa-backup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+.tfa-backup-code {
+  font-family: monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  background: var(--color-bg, #0d1117);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  color: var(--color-text, #e6edf3);
+  user-select: all;
+}
+.tfa-backup-note {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #8b949e);
+  line-height: 1.5;
+}
+
+/* Challenge overlay (used inside login card) */
+.tfa-challenge {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.tfa-challenge-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text, #e6edf3);
+}
+.tfa-challenge-body {
+  font-size: 0.875rem;
+  color: var(--color-text-muted, #8b949e);
+  margin: 0;
+}
+.tfa-challenge-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+.tfa-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--color-accent, #58a6ff);
+  text-align: left;
+  text-decoration: underline;
+}
+.tfa-link-btn:hover { opacity: 0.8; }
+
+/* Sidebar 2FA link */
+.sidebar-2fa-link {
+  font-size: 0.7rem;
+  color: var(--color-accent, #58a6ff);
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.sidebar-2fa-link:hover { opacity: 1; }

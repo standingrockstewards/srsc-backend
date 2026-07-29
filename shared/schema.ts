@@ -12,6 +12,11 @@ export const users = sqliteTable("users", {
   phone: text("phone"),
   role: text("role").notNull().default("field_tech"), // admin | field_tech | client
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  // Brick 10f — TOTP 2FA (additive, Migration A)
+  totpSecret:      text("totp_secret"),                                      // AES-256 encrypted; NULL until enrolled
+  totpEnabled:     integer("totp_enabled",     { mode: "boolean" }).notNull().default(false),
+  totpOptOutAck:   integer("totp_opt_out_ack",  { mode: "boolean" }).notNull().default(false), // client opt-out ack
+  totpBackupCodes: text("totp_backup_codes"),                                 // JSON array of bcrypt-hashed single-use codes
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });

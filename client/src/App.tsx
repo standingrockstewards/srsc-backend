@@ -23,7 +23,8 @@ import { PropertiesPage } from "@/pages/PropertiesPage";
 import { CustomersPage }  from "@/pages/CustomersPage";
 import { FieldOpsPage }   from "@/pages/FieldOpsPage";
 import { AdminPage }      from "@/pages/AdminPage";
-import { OpsMapPage }     from "@/pages/OpsMapPage";
+import { OpsMapPage }            from "@/pages/OpsMapPage";
+import { TwoFactorSetupPage }    from "@/pages/TwoFactorSetupPage";
 
 // Bridge: registers the network error handler once ToastProvider is in scope.
 // Must be a child of ToastProvider so useToast() works.
@@ -74,6 +75,8 @@ export default function App() {
 
                 {/* Brick 10e — Confidential Ops Map */}
                 {/* vendor + client → RequireRole redirects to /dashboard */}
+                <Route path="/settings/2fa" element={<TwoFactorSetupPage />} />
+
                 <Route
                   path="/ops-map"
                   element={

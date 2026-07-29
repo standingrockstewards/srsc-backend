@@ -1,12 +1,14 @@
 /**
- * /api/v2/auth — login, logout, me
+ * /api/v2/auth — login, logout, me, 2fa/*
  *
  * Uses the existing v1 users table (SQLite via storage) for credential lookup.
  * On success, writes { v2UserId, v2Role } into the express-session.
  *
- * bcryptjs is used for password comparison. Since v1 stores passwords in
- * plaintext, we use bcryptjs.compareSync with a fallback to plain equality
- * so existing v1 credentials work immediately without a migration.
+ * Brick 10f — TOTP gate:
+ *   If user.totpEnabled, login sets v2TotpPending=true and returns
+ *   { requiresTwoFactor: true } instead of the full session payload.
+ *   The client must POST /auth/2fa/validate with a valid code to promote
+ *   the session to fully authenticated.
  *
  * Never log credentials or tokens.
  */
@@ -17,6 +19,7 @@ import { storage } from "../../storage";
 import { customersRepo } from "../../repositories/customers";
 import { getEffectivePermissions } from "../../permissions";
 import { requireAuthV2 } from "../../middleware/authV2";
+import twoFactorRouter from "./twoFactor";
 
 const router = Router();
 
@@ -50,14 +53,26 @@ router.post("/login", async (req, res) => {
   req.session.v2UserId = user.id;
   req.session.v2Role   = user.role;
 
-  // Resolve v2 customerId if this is a client
-  let customerId: number | null = null;
+  // Brick 10f — TOTP gate: if 2FA enabled, return partial session + challenge
+  if ((user as any).totpEnabled) {
+    req.session.v2TotpPending = true;
+    return res.status(200).json({
+      requiresTwoFactor: true,
+      message: "Password verified. Submit your TOTP code to POST /api/v2/auth/2fa/validate.",
+    });
+  }
+
+  // No 2FA — full session
+  req.session.v2TotpPending = false;
+
+  // Resolve v2 customerId if this is a client (text cuid2, not integer)
+  let customerId: string | null = null;
   if (user.role === "client") {
     const customer = await customersRepo.getByEmail(user.email);
     customerId = customer?.id ?? null;
   }
 
-  const { password: _pw, ...safeUser } = user;
+  const { password: _pw, totpSecret: _ts, totpBackupCodes: _bc, ...safeUser } = user as any;
   const permissions = getEffectivePermissions(user.id, user.role);
 
   return res.json({
@@ -84,11 +99,12 @@ router.get("/me", requireAuthV2, async (req, res) => {
   const user = storage.getUserById(req.v2UserId!);
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  const { password: _pw, ...safeUser } = user;
+  // Strip sensitive fields — never expose secret or backup code hashes
+  const { password: _pw, totpSecret: _ts2, totpBackupCodes: _bc2, ...safeUser } = user as any;
   const permissions = getEffectivePermissions(user.id, user.role);
 
-  // Resolve v2 customerId
-  let customerId: number | null = null;
+  // Resolve v2 customerId (text cuid2, not integer)
+  let customerId: string | null = null;
   if (user.role === "client") {
     const customer = await customersRepo.getByEmail(user.email);
     customerId = customer?.id ?? null;
@@ -101,5 +117,11 @@ router.get("/me", requireAuthV2, async (req, res) => {
     permissions,
   });
 });
+
+// ── 2FA sub-router ─────────────────────────────────────────────────────────────
+// Mounted under /api/v2/auth/2fa/*
+// requireAuthV2 is already applied to the /api/v2 router in index.ts,
+// so all 2fa/* routes inherit the session check.
+router.use("/2fa", twoFactorRouter);
 
 export default router;

@@ -42,8 +42,9 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login:  (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  login:      (username: string, password: string) => Promise<void>;
+  logout:     () => Promise<void>;
+  refreshMe:  () => Promise<void>;  // Brick 10f: re-sync after TOTP validate
   isAuthenticated: boolean;
 }
 
@@ -133,6 +134,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Brick 10f: re-sync auth state from server after TOTP validation promotes session
+  const refreshMe = useCallback(async () => {
+    const data = await api.get<LoginResponse>("/auth/me");
+    persistSession(data.role, data.customerId);
+    setState({
+      user:        data.user,
+      role:        data.role,
+      customerId:  data.customerId,
+      permissions: data.permissions ?? {},
+      loading:     false,
+    });
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
@@ -150,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !state.loading && state.user !== null,
         login,
         logout,
+        refreshMe,
       }}
     >
       {children}

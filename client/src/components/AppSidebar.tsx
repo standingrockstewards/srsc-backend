@@ -226,6 +226,8 @@ export function AppSidebar({
           <div className="sidebar-user-info">
             <div className="sidebar-user-name">{user?.username ?? "—"}</div>
             <div className="sidebar-user-role">{role ?? "—"}</div>
+            {/* Brick 10f: quick link to 2FA setup */}
+            <a href="/settings/2fa" className="sidebar-2fa-link">2FA Settings</a>
           </div>
           <button
             className="sidebar-logout-btn"

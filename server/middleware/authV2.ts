@@ -24,8 +24,9 @@ import { propertiesRepo } from "../repositories/properties";
 // ─── Session type augmentation ────────────────────────────────────────────────
 declare module "express-session" {
   interface SessionData {
-    v2UserId?: number;   // v1 users.id (SQLite integer — internal only, never exposed as FK)
-    v2Role?:   string;
+    v2UserId?:      number;   // v1 users.id (SQLite integer — internal only, never exposed as FK)
+    v2Role?:        string;
+    v2TotpPending?: boolean;  // Brick 10f: true = password OK but TOTP not yet verified
   }
 }
 
@@ -61,6 +62,20 @@ export async function requireAuthV2(
   if (!user || !user.active) {
     req.session.destroy(() => {});
     return res.status(401).json({ error: "Session invalid — user not found or deactivated" });
+  }
+
+  // Brick 10f — partial-session guard
+  // If password was verified but TOTP not yet confirmed, block all routes
+  // except /auth/2fa/* (which completes the verification).
+  if (session.v2TotpPending) {
+    const path = req.path ?? "";
+    const isTwoFactorPath = path.includes("/2fa/") || path.endsWith("/2fa");
+    if (!isTwoFactorPath) {
+      return res.status(403).json({
+        error: "Two-factor authentication required. POST /api/v2/auth/2fa/validate to complete login.",
+        requiresTwoFactor: true,
+      });
+    }
   }
 
   req.v2UserId = user.id;

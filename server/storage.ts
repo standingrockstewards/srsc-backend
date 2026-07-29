@@ -468,6 +468,12 @@ try {
 // Ensure user password field exists for change-password
 try { sqlite.exec("ALTER TABLE users ADD COLUMN password_updated_at TEXT"); } catch {}
 
+// Brick 10f — TOTP 2FA columns (additive, Migration A)
+try { sqlite.exec("ALTER TABLE users ADD COLUMN totp_secret       TEXT"); } catch {}
+try { sqlite.exec("ALTER TABLE users ADD COLUMN totp_enabled      INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { sqlite.exec("ALTER TABLE users ADD COLUMN totp_opt_out_ack  INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { sqlite.exec("ALTER TABLE users ADD COLUMN totp_backup_codes TEXT"); } catch {}
+
 // ─── FAQ / Knowledge Base tables ─────────────────────────────────────────────
 try {
   sqlite.exec(`

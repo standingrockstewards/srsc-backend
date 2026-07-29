@@ -1,53 +1,68 @@
 /**
- * src/pages/LoginPage.tsx  (Brick 10d — returnTo param for session-expiry redirect)
+ * src/pages/LoginPage.tsx  (Brick 10f — TOTP challenge gate)
  *
- * Login form — POSTs to /api/v2/auth/login via the auth context.
- * On success, redirects to the intended destination:
- *   1. location.state.from  — RequireAuth guard sets this on initial auth check
- *   2. ?returnTo=<path>     — global 401 handler sets this on session expiry
- *   3. /dashboard           — default
+ * Login form — POSTs to /api/v2/auth/login directly (bypassing AuthContext.login)
+ * so we can inspect the raw response for { requiresTwoFactor: true }.
  *
- * No token in localStorage. The session cookie is httpOnly — never touched in JS.
+ * Flow:
+ *   Normal login   → server returns LoginResponse → sync AuthContext via /auth/me
+ *   2FA required   → server returns { requiresTwoFactor: true } (HTTP 200)
+ *                 → show TwoFactorChallenge
+ *   TOTP verified  → POST /auth/2fa/validate succeeds → sync AuthContext via /auth/me
+ *                 → navigate to redirectTo
+ *
+ * No token in localStorage. Session cookie is httpOnly — never touched in JS.
  */
 
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
+import { TwoFactorChallenge } from "@/components/TwoFactorChallenge";
 
 export function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { isAuthenticated, refreshMe } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error,    setError]    = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(false);
+  const [username,    setUsername]    = useState("");
+  const [password,    setPassword]    = useState("");
+  const [error,       setError]       = useState<string | null>(null);
+  const [loading,     setLoading]     = useState(false);
+  const [totpPending, setTotpPending] = useState(false);
 
-  // Resolve redirect destination:
-  //   state.from  → set by RequireAuth on unauthenticated access
-  //   ?returnTo=  → set by 401 handler on session expiry (Brick 10d)
-  //   /dashboard  → default
-  const stateFrom  = (location.state as { from?: { pathname: string } })?.from?.pathname;
+  const stateFrom   = (location.state as { from?: { pathname: string } })?.from?.pathname;
   const queryReturn = new URLSearchParams(location.search).get("returnTo");
-  const redirectTo = stateFrom ?? queryReturn ?? "/dashboard";
+  const redirectTo  = stateFrom ?? queryReturn ?? "/dashboard";
 
-  // If already authenticated, skip login page
   if (isAuthenticated) {
     navigate(redirectTo, { replace: true });
     return null;
   }
 
-  // Show session-expired notice when landing here from a 401 redirect
   const isSessionExpired = !!queryReturn && !stateFrom;
 
+  // ── Primary login ────────────────────────────────────────────────────────────
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      await login(username.trim(), password);
+      const result = await apiFetch("/auth/login", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username: username.trim(), password }),
+      }) as Record<string, unknown>;
+
+      if (result.requiresTwoFactor === true) {
+        // Partial session — password OK, TOTP required
+        setTotpPending(true);
+        setLoading(false);
+        return;
+      }
+
+      // Full session — sync AuthContext state by re-fetching /auth/me
+      await refreshMe();
       navigate(redirectTo, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -66,6 +81,42 @@ export function LoginPage() {
     }
   };
 
+  // ── TOTP challenge success ────────────────────────────────────────────────────
+  const handleTotpSuccess = async () => {
+    // /validate promoted the session — sync AuthContext
+    await refreshMe();
+    navigate(redirectTo, { replace: true });
+  };
+
+  // ── TOTP cancel ──────────────────────────────────────────────────────────────
+  const handleTotpCancel = () => {
+    setTotpPending(false);
+    setUsername("");
+    setPassword("");
+  };
+
+  // ── Render: TOTP challenge ────────────────────────────────────────────────────
+  if (totpPending) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <div className="login-logo">
+            <div className="login-logo-mark">SR</div>
+            <div>
+              <div className="login-logo-text">Standing Rock</div>
+              <div className="login-logo-sub">Stewardship Co.</div>
+            </div>
+          </div>
+          <TwoFactorChallenge
+            onSuccess={handleTotpSuccess}
+            onCancel={handleTotpCancel}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: login form ────────────────────────────────────────────────────────
   return (
     <div className="login-page">
       <div className="login-card">
@@ -81,17 +132,14 @@ export function LoginPage() {
         <h1 className="login-title">Sign in</h1>
         <p className="login-subtitle">Operations portal — authorized access only.</p>
 
-        {/* Session-expired notice */}
         {isSessionExpired && !error && (
           <div className="info-banner" role="status">
             Your session expired. Please sign in again.
           </div>
         )}
 
-        {/* Error */}
         {error && <div className="error-banner" role="alert">{error}</div>}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} autoComplete="on" noValidate>
           <div className="form-group">
             <label className="form-label" htmlFor="username">Username</label>
