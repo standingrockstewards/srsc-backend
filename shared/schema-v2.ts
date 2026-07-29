@@ -78,6 +78,15 @@ export const propertiesV2 = pgTable("properties", {
   billingState:             text("billing_state").notNull().default("current"),
   createdAt:                timestamp("created_at").notNull().defaultNow(),
   updatedAt:                timestamp("updated_at").notNull().defaultNow(),
+  // Brick 10h — Encrypted sensitive fields (AES-256-GCM at rest)
+  // Plaintext columns intentionally NOT dropped in this brick.
+  // _enc values are NEVER returned from list endpoints — reveal-only via vault route.
+  alarmCodeEnc:             text("alarm_code_enc"),
+  gateCodeEnc:              text("gate_code_enc"),
+  accessNotesEnc:           text("access_notes_enc"),
+  keyLocationEnc:           text("key_location_enc"),
+  addressEnc:               text("address_enc"),
+  sensitiveUpdatedAt:       timestamp("sensitive_updated_at", { withTimezone: true }),
 });
 
 export const insertPropertyV2Schema = createInsertSchema(propertiesV2).omit({ id: true, createdAt: true, updatedAt: true });
@@ -424,3 +433,28 @@ export const insertScheduledVisitSchema = createInsertSchema(scheduledVisits).om
 });
 export type InsertScheduledVisit = z.infer<typeof insertScheduledVisitSchema>;
 export type ScheduledVisit = typeof scheduledVisits.$inferSelect;
+
+// ─── vault_access_log (Brick 10h, append-only) ───────────────────────────────
+// Every successful decrypt read is logged here BEFORE decrypted values are returned.
+// Audit-first: if this insert fails, the caller returns 503 — no unlogged reads ever.
+// No UPDATE or DELETE routes exist for this table.
+
+export const vaultAccessLog = pgTable(
+  "vault_access_log",
+  {
+    id:          id(),
+    propertyId:  text("property_id").notNull().references(() => propertiesV2.id),
+    userId:      text("user_id").notNull(),       // string of SQLite users.id (internal)
+    userRole:    text("user_role").notNull(),
+    fieldsRead:  text("fields_read").array().notNull(),  // exactly which fields were decrypted
+    accessedAt:  timestamp("accessed_at", { withTimezone: true }).notNull().defaultNow(),
+    ipAddress:   text("ip_address"),
+  },
+  (t) => ({
+    propIdx:   index("idx_vl_property").on(t.propertyId),
+    userIdx:   index("idx_vl_user").on(t.userId),
+    timeIdx:   index("idx_vl_accessed").on(t.accessedAt),
+  }),
+);
+
+export type VaultAccessLog = typeof vaultAccessLog.$inferSelect;

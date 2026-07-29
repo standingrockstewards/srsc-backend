@@ -8,11 +8,29 @@ import {
   requireNotVendor,
   requirePropertyOwnerOrAdmin,
 } from "../../middleware/authV2";
+import vaultRouter from "./vault"; // Brick 10h: encrypted sensitive fields
+
+// Brick 10h: strip all _enc columns + sensitiveUpdatedAt from any property response.
+// These fields are ONLY returned via the explicit /vault reveal endpoint.
+const ENC_KEYS = [
+  "alarmCodeEnc", "gateCodeEnc", "accessNotesEnc", "keyLocationEnc",
+  "addressEnc", "sensitiveUpdatedAt",
+] as const;
+type WithEnc = Record<string, unknown>;
+function stripSensitive<T extends WithEnc>(row: T): Omit<T, typeof ENC_KEYS[number]> {
+  const out = { ...row } as WithEnc;
+  for (const key of ENC_KEYS) delete out[key];
+  return out as Omit<T, typeof ENC_KEYS[number]>;
+}
 
 const router = Router();
 const patchSchema = insertPropertyV2Schema.partial();
 
+// Brick 10h: vault sub-router (mounted before /:id to avoid swallowing /vault segment)
+router.use("/:propertyId/vault", vaultRouter);
+
 // GET /api/v2/properties
+// Brick 10h: _enc fields stripped — never appear in list responses
 router.get("/", requireNotVendor, async (req, res) => {
   try {
     if (req.v2Role === "admin" || req.v2Role === "supervisor") {
@@ -20,24 +38,25 @@ router.get("/", requireNotVendor, async (req, res) => {
       const rows = customerId
         ? await propertiesRepo.listByCustomer(customerId as string)
         : await propertiesRepo.getAll();
-      return res.json(rows);
+      return res.json(rows.map(stripSensitive));
     }
     if (!req.v2CustomerId) {
       return res.status(403).json({ error: "No customer record linked to your account" });
     }
-    return res.json(await propertiesRepo.listByCustomer(req.v2CustomerId));
+    return res.json((await propertiesRepo.listByCustomer(req.v2CustomerId)).map(stripSensitive));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
 // GET /api/v2/properties/:id
+// Brick 10h: _enc fields stripped — use /vault endpoint for sensitive data
 router.get("/:id", requirePropertyOwnerOrAdmin("id"), async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params["id"]);
   try {
     const row = await propertiesRepo.getById(id);
     if (!row) return res.status(404).json({ error: "Property not found" });
-    return res.json(row);
+    return res.json(stripSensitive(row));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
