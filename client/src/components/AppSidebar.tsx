@@ -49,6 +49,12 @@ const Icon = {
       <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" />
     </svg>
   ),
+  OpsMap: () => (
+    <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+      <path d="M8 1.5C5.515 1.5 3.5 3.515 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6C12.5 3.515 10.485 1.5 8 1.5z"/>
+      <circle cx="8" cy="6" r="1.5"/>
+    </svg>
+  ),
   Logout: () => (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
       <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" />
@@ -113,7 +119,9 @@ export function AppSidebar({
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
-  const isStaff = role === "admin" || role === "supervisor";
+  const isStaff  = role === "admin" || role === "supervisor";
+  // Ops Map visible to staff + field_tech; hidden from vendor and client
+  const isOpsMap  = role === "admin" || role === "supervisor" || role === "field_tech";
 
   const handleLogout = async () => {
     await logout();
@@ -170,7 +178,7 @@ export function AppSidebar({
           </ul>
         </div>
 
-        {/* Group: Field Operations */}
+        {/* Group: Field Operations — visible to admin, supervisor, field_tech */}
         <div className="sidebar-group">
           <span className="sidebar-group-label" aria-hidden="true">Field Operations</span>
           <ul role="list">
@@ -181,6 +189,15 @@ export function AppSidebar({
               badge={badges.openJobs}
               onNavClick={onNavClick}
             />
+            {/* Ops Map — confidential; hidden from vendor + client via isOpsMap */}
+            {isOpsMap && (
+              <NavItem
+                to="/ops-map"
+                icon={<Icon.OpsMap />}
+                label="Ops Map"
+                onNavClick={onNavClick}
+              />
+            )}
           </ul>
         </div>
 

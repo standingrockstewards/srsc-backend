@@ -109,3 +109,19 @@ export interface StewardshipJob {
   createdAt: string;
   updatedAt: string;
 }
+
+// ─── Shoreline Markers (Brick 10e-prereq) ────────────────────────────────────
+export interface ShorelineMarker {
+  id:           string;
+  markerNumber: string;
+  latitude:     string;   // numeric(9,6) returned as string by Drizzle/pg driver
+  longitude:    string;
+  description:  string | null;
+  lake:         string;
+  createdAt:    string;
+}
+
+export interface NearestMarkerResult {
+  marker:        ShorelineMarker;
+  distanceMiles: number;
+}

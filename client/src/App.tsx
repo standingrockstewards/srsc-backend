@@ -1,10 +1,9 @@
 /**
- * src/App.tsx  (Brick 10d — ErrorBoundary + ToastProvider + registerNetworkErrorHandler)
+ * src/App.tsx  (Brick 10e — OpsMapPage + /ops-map route)
  *
- * Route tree unchanged from 10c. Added:
- *   - <ErrorBoundary> wraps the entire app — render crashes never white-screen.
- *   - <ToastProvider> provides non-blocking network/server error toasts.
- *   - registerNetworkErrorHandler wired to showToast on mount (via a bridge component).
+ * Route tree additions from 10e:
+ *   - /ops-map  — RequireRole([admin, supervisor, field_tech]) → OpsMapPage.
+ *     Vendors and clients land on /dashboard redirect (RequireRole fallback).
  *
  * AuthProvider is inside BrowserRouter (needs useNavigate for the 401 redirect handler).
  */
@@ -24,6 +23,7 @@ import { PropertiesPage } from "@/pages/PropertiesPage";
 import { CustomersPage }  from "@/pages/CustomersPage";
 import { FieldOpsPage }   from "@/pages/FieldOpsPage";
 import { AdminPage }      from "@/pages/AdminPage";
+import { OpsMapPage }     from "@/pages/OpsMapPage";
 
 // Bridge: registers the network error handler once ToastProvider is in scope.
 // Must be a child of ToastProvider so useToast() works.
@@ -68,6 +68,17 @@ export default function App() {
                   element={
                     <RequireRole roles={["admin", "supervisor"]}>
                       <AdminPage />
+                    </RequireRole>
+                  }
+                />
+
+                {/* Brick 10e — Confidential Ops Map */}
+                {/* vendor + client → RequireRole redirects to /dashboard */}
+                <Route
+                  path="/ops-map"
+                  element={
+                    <RequireRole roles={["admin", "supervisor", "field_tech"]}>
+                      <OpsMapPage />
                     </RequireRole>
                   }
                 />
