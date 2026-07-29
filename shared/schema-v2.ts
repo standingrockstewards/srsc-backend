@@ -8,7 +8,7 @@
 
 import {
   pgTable, varchar, text, decimal, integer,
-  boolean, timestamp, date, pgEnum, numeric, index,
+  boolean, timestamp, date, pgEnum, numeric, index, jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -268,3 +268,78 @@ export const monitoringEvents = pgTable(
 export const insertMonitoringEventSchema = createInsertSchema(monitoringEvents).omit({ id: true, createdAt: true });
 export type InsertMonitoringEvent = z.infer<typeof insertMonitoringEventSchema>;
 export type MonitoringEvent = typeof monitoringEvents.$inferSelect;
+
+// ─── Brick 8 constants ────────────────────────────────────────────────────────
+// All status/type/priority columns are plain text in the live DB.
+// TS unions enforce allowed values; NO pgEnum used.
+
+export const JOB_STATUSES = [
+  "pending", "scheduled", "dispatched", "in_progress", "completed", "cancelled",
+] as const;
+export type JobStatus = typeof JOB_STATUSES[number];
+
+export const JOB_PRIORITIES = ["low", "normal", "urgent"] as const;
+export type JobPriority = typeof JOB_PRIORITIES[number];
+
+export const JOB_TRIGGER_TYPES = [
+  "anchor_watch", "shipshape", "signal_flare", "weather", "manual",
+] as const;
+export type JobTriggerType = typeof JOB_TRIGGER_TYPES[number];
+
+export const JOB_TYPES = ["visit", "inspection", "response"] as const;
+export type JobType = typeof JOB_TYPES[number];
+
+// ─── integration_sources ─────────────────────────────────────────────────────
+// Live schema verified 2026-07-28 (10 columns).
+// property_id is nullable (a source can be global or per-property).
+// config is jsonb — rule engine reads thresholds etc. from here at runtime.
+export const integrationSources = pgTable("integration_sources", {
+  id:              id(),
+  propertyId:      text("property_id").references(() => propertiesV2.id),   // nullable
+  provider:        text("provider").notNull(),
+  displayName:     text("display_name"),
+  enabled:         boolean("enabled").notNull().default(true),
+  config:          jsonb("config").notNull().default({}),
+  autoCreateJob:   boolean("auto_create_job").notNull().default(true),
+  defaultPriority: text("default_priority").notNull().default("normal"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:       timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertIntegrationSourceSchema = createInsertSchema(integrationSources).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertIntegrationSource = z.infer<typeof insertIntegrationSourceSchema>;
+export type IntegrationSource = typeof integrationSources.$inferSelect;
+
+// ─── stewardship_jobs ─────────────────────────────────────────────────────────
+// Live schema verified 2026-07-28 (17 columns).
+// assigned_to is a nullable text ID with no hard FK — the type of the assignee
+// (vendor, field_tech, internal, etc.) is stored in assigned_to_type so the
+// app layer can resolve it without a DB enum.
+// source_event_id links back to monitoring_events.id (soft reference, nullable).
+export const stewardshipJobs = pgTable("stewardship_jobs", {
+  id:             id(),
+  propertyId:     text("property_id").notNull().references(() => propertiesV2.id),
+  sourceEventId:  text("source_event_id"),                         // soft ref to monitoring_events.id
+  triggerType:    text("trigger_type").notNull(),                   // JOB_TRIGGER_TYPES
+  jobType:        text("job_type").notNull(),                       // JOB_TYPES
+  status:         text("status").notNull().default("pending"),      // JOB_STATUSES
+  priority:       text("priority").notNull().default("normal"),     // JOB_PRIORITIES
+  assignedTo:     text("assigned_to"),                             // nullable text ID (no hard FK)
+  assignedToType: text("assigned_to_type"),                        // "vendor"|"field_tech"|"internal"
+  scheduledFor:   timestamp("scheduled_for",  { withTimezone: true }),
+  dueBy:          timestamp("due_by",         { withTimezone: true }),
+  notes:          text("notes"),
+  metadata:       jsonb("metadata").notNull().default({}),
+  dispatchedAt:   timestamp("dispatched_at",  { withTimezone: true }),
+  completedAt:    timestamp("completed_at",   { withTimezone: true }),
+  createdAt:      timestamp("created_at",     { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:      timestamp("updated_at",     { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertStewardshipJobSchema = createInsertSchema(stewardshipJobs).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertStewardshipJob = z.infer<typeof insertStewardshipJobSchema>;
+export type StewardshipJob = typeof stewardshipJobs.$inferSelect;

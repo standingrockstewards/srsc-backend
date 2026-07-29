@@ -168,3 +168,22 @@ router.get("/:propertyId/events", requirePropertyOwnerOrAdmin("propertyId"), asy
 });
 
 export default router;
+
+// ── Brick 8 — Property-scoped jobs (client owner-or-admin read) ───────────────
+// GET /api/v2/properties/:propertyId/jobs?status=&from=&to=
+import { stewardshipJobsRepo } from "../../repositories/stewardshipJobs";
+router.get("/:propertyId/jobs", requirePropertyOwnerOrAdmin("propertyId"), async (req, res) => {
+  const { propertyId } = req.params;
+  const { status, from, to, limit } = req.query;
+  try {
+    return res.json(await stewardshipJobsRepo.list({
+      propertyId,
+      status:  status as any,
+      from:    from  as string | undefined,
+      to:      to    as string | undefined,
+      limit:   limit ? Number(limit) : undefined,
+    }));
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+});

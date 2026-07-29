@@ -2,45 +2,58 @@
  * v2 API router — mounted at /api/v2 in server/routes.ts
  *
  * Auth flow:
- *   /api/v2/auth/*  — public (login/logout/me handles its own requireAuthV2 on /me)
- *   /api/v2/health  — public (infrastructure health check)
- *   everything else — gated by requireAuthV2 applied as router-level middleware
+ *   /api/v2/auth/*          — public (login/logout; /me checks its own auth)
+ *   /api/v2/health          — public
+ *   /api/v2/integrations/*  — public-with-verification (webhook; no session required)
+ *   everything else         — gated by requireAuthV2 (session cookie)
  */
 
 import { Router } from "express";
 import { requireAuthV2 } from "../../middleware/authV2";
-import healthRouter            from "./health";
-import authRouter              from "./auth";
-import customersRouter         from "./customers";
-import propertiesRouter        from "./properties";
-import referralsRouter         from "./referrals";
-import vendorsRouter           from "./vendors";
-import legalDocumentsRouter    from "./legalDocuments";
+
+// Public / pre-auth routers
+import healthRouter             from "./health";
+import authRouter               from "./auth";
+import integrationsRouter       from "./integrations";       // Brick 8: webhook ingest (public+sig)
+
+// Protected routers
+import customersRouter          from "./customers";
+import propertiesRouter         from "./properties";
+import referralsRouter          from "./referrals";
+import vendorsRouter            from "./vendors";
+import legalDocumentsRouter     from "./legalDocuments";
 import customerSignaturesRouter from "./customerSignatures";
-import eventsRouter            from "./monitoringEvents";  // Brick 6: mounted at /events
-import retainerRouter          from "./retainer";
-import creditsRouter           from "./credits";
-import vendorPaymentsRouter    from "./vendorPayments";     // Brick 7: payout-batches + vendor-payments
+import eventsRouter             from "./monitoringEvents";   // Brick 6: /events/:id, /events/system
+import retainerRouter           from "./retainer";           // Brick 5
+import creditsRouter            from "./credits";            // Brick 5
+import vendorPaymentsRouter     from "./vendorPayments";     // Brick 7
+import integrationSourcesRouter from "./integrationSources"; // Brick 8: provider registry
+import jobsRouter               from "./jobs";               // Brick 8: stewardship jobs
 
 const v2 = Router();
 
-// ── Public routes (no auth required) ──────────────────────────────────────────
-v2.use("/health", healthRouter);   // GET /api/v2/health
-v2.use("/auth",   authRouter);     // POST /api/v2/auth/login, /logout, GET /me
+// ── Public routes ──────────────────────────────────────────────────────────────
+v2.use("/health",       healthRouter);
+v2.use("/auth",         authRouter);
+v2.use("/integrations", integrationsRouter);   // POST /api/v2/integrations/:provider
 
-// ── Protected routes (all require a valid v2 session) ─────────────────────────
+// ── Protected routes (require valid v2 session) ────────────────────────────────
 v2.use(requireAuthV2);
 
-v2.use("/customers",   customersRouter);          // CRUD + ownership
-v2.use("/properties",  propertiesRouter);          // CRUD + retainer + lat/lng/shoreline
-                                                   // Brick 6: /:propertyId/events (POST log, GET list)
-v2.use("/referrals",   referralsRouter);           // create (admin) + vest + list
-v2.use("/vendors",     vendorsRouter);             // CRUD + reviews + scorecard
-v2.use("/legal",       legalDocumentsRouter);      // Brick 4: GET :docType/active, GET :docType/versions, POST
-v2.use("/signatures",  customerSignaturesRouter);  // Brick 4: POST capture, GET list (ownership gated)
-v2.use("/events",      eventsRouter);              // Brick 6: GET /:id, POST /system, PATCH /:id/acknowledge
-v2.use("/retainer",    retainerRouter);            // Brick 5: ledger, balance, low-balance, statements, dunning
-v2.use("/credits",     creditsRouter);             // Brick 5: issue + apply credits
-v2.use("/",           vendorPaymentsRouter);       // Brick 7: /payout-batches, /vendor-payments/:id/*, /vendors/:id/payments
+v2.use("/customers",            customersRouter);
+v2.use("/properties",           propertiesRouter);
+  // ↳ also serves:
+  //   Brick 6:  /:propertyId/events  (POST log visit, GET list)
+  //   Brick 8:  /:propertyId/jobs    (GET list, client owner-or-admin)
+v2.use("/referrals",            referralsRouter);
+v2.use("/vendors",              vendorsRouter);
+v2.use("/legal",                legalDocumentsRouter);
+v2.use("/signatures",           customerSignaturesRouter);
+v2.use("/events",               eventsRouter);
+v2.use("/retainer",             retainerRouter);
+v2.use("/credits",              creditsRouter);
+v2.use("/",                     vendorPaymentsRouter);       // /payout-batches, /vendor-payments/:id/*
+v2.use("/integration-sources",  integrationSourcesRouter);  // Brick 8: provider registry CRUD
+v2.use("/jobs",                 jobsRouter);                 // Brick 8: stewardship jobs CRUD
 
 export default v2;
