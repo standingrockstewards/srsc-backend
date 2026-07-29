@@ -25,6 +25,7 @@ import { FieldOpsPage }   from "@/pages/FieldOpsPage";
 import { AdminPage }      from "@/pages/AdminPage";
 import { OpsMapPage }            from "@/pages/OpsMapPage";
 import { TwoFactorSetupPage }    from "@/pages/TwoFactorSetupPage";
+import { CalendarPage }          from "@/pages/CalendarPage";
 
 // Bridge: registers the network error handler once ToastProvider is in scope.
 // Must be a child of ToastProvider so useToast() works.
@@ -76,6 +77,16 @@ export default function App() {
                 {/* Brick 10e — Confidential Ops Map */}
                 {/* vendor + client → RequireRole redirects to /dashboard */}
                 <Route path="/settings/2fa" element={<TwoFactorSetupPage />} />
+
+                {/* Brick 10g — Calendar (admin/supervisor/field_tech) */}
+                <Route
+                  path="/calendar"
+                  element={
+                    <RequireRole roles={["admin", "supervisor", "field_tech"]}>
+                      <CalendarPage />
+                    </RequireRole>
+                  }
+                />
 
                 <Route
                   path="/ops-map"

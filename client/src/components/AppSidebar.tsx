@@ -49,6 +49,15 @@ const Icon = {
       <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" />
     </svg>
   ),
+  Calendar: () => (
+    <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+      <rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/>
+      <path d="M1.5 6.5h13M5 1.5v2M11 1.5v2"/>
+      <rect x="4" y="9" width="2" height="2" rx="0.5" fill="currentColor" stroke="none"/>
+      <rect x="7" y="9" width="2" height="2" rx="0.5" fill="currentColor" stroke="none"/>
+      <rect x="10" y="9" width="2" height="2" rx="0.5" fill="currentColor" stroke="none"/>
+    </svg>
+  ),
   OpsMap: () => (
     <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
       <path d="M8 1.5C5.515 1.5 3.5 3.515 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6C12.5 3.515 10.485 1.5 8 1.5z"/>
@@ -189,6 +198,15 @@ export function AppSidebar({
               badge={badges.openJobs}
               onNavClick={onNavClick}
             />
+            {/* Calendar — scheduling; visible to admin/supervisor/field_tech */}
+            {isOpsMap && (
+              <NavItem
+                to="/calendar"
+                icon={<Icon.Calendar />}
+                label="Calendar"
+                onNavClick={onNavClick}
+              />
+            )}
             {/* Ops Map — confidential; hidden from vendor + client via isOpsMap */}
             {isOpsMap && (
               <NavItem

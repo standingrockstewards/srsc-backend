@@ -30,6 +30,8 @@ import vendorPaymentsRouter     from "./vendorPayments";     // Brick 7
 import integrationSourcesRouter from "./integrationSources"; // Brick 8: provider registry
 import jobsRouter               from "./jobs";               // Brick 8: stewardship jobs
 import markersRouter            from "./markers";             // Brick 10e-prereq: shoreline markers
+import visitsRouter             from "./visits";              // Brick 10g: scheduled visits
+import calendarRouter           from "./calendar";             // Brick 10g: merged calendar feed
 
 const v2 = Router();
 
@@ -57,5 +59,7 @@ v2.use("/",                     vendorPaymentsRouter);       // /payout-batches,
 v2.use("/integration-sources",  integrationSourcesRouter);  // Brick 8: provider registry CRUD
 v2.use("/jobs",                 jobsRouter);                 // Brick 8: stewardship jobs CRUD
 v2.use("/markers",              markersRouter);              // Brick 10e-prereq: shoreline markers
+v2.use("/visits",               visitsRouter);               // Brick 10g: scheduled visits CRUD
+v2.use("/calendar",             calendarRouter);             // Brick 10g: merged calendar feed
 
 export default v2;

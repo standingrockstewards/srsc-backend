@@ -375,3 +375,52 @@ export const insertShorelineMarkerSchema = createInsertSchema(shorelineMarkers).
 });
 export type InsertShorelineMarker = z.infer<typeof insertShorelineMarkerSchema>;
 export type ShorelineMarker = typeof shorelineMarkers.$inferSelect;
+
+// ─── scheduledVisits ─────────────────────────────────────────────────────────
+// Brick 10g — proactively scheduled inspection visits with tech assignment.
+// All IDs text (nanoid). assigned_tech_id is a text reference to SQLite users.id
+// (no cross-DB FK enforced at Postgres level — same convention as stewardship_jobs.assigned_to).
+
+export const VISIT_TYPES_V2 = [
+  "routine",
+  "storm_response",
+  "requested_check",
+  "pre_season_open",
+  "post_season_close",
+  "follow_up",
+] as const;
+export type VisitTypeV2 = typeof VISIT_TYPES_V2[number];
+
+export const VISIT_STATUSES = ["scheduled", "completed", "canceled", "missed"] as const;
+export type VisitStatus = typeof VISIT_STATUSES[number];
+
+export const scheduledVisits = pgTable(
+  "scheduled_visits",
+  {
+    id:             id(),
+    propertyId:     text("property_id").notNull().references(() => propertiesV2.id),
+    assignedTechId: text("assigned_tech_id").notNull(),
+    visitType:      text("visit_type").notNull(),
+    scheduledAt:    timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    status:         text("status").notNull().default("scheduled"),
+    followUpOf:     text("follow_up_of"),  // self-FK — no Drizzle circular ref; enforced in DB
+    notes:          text("notes"),
+    createdBy:      text("created_by").notNull(),
+    createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:      timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    propertyIdx:   index("idx_sv_property").on(t.propertyId),
+    techIdx:       index("idx_sv_tech").on(t.assignedTechId),
+    scheduledIdx:  index("idx_sv_scheduled").on(t.scheduledAt),
+    statusIdx:     index("idx_sv_status").on(t.status),
+  }),
+);
+
+export const insertScheduledVisitSchema = createInsertSchema(scheduledVisits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertScheduledVisit = z.infer<typeof insertScheduledVisitSchema>;
+export type ScheduledVisit = typeof scheduledVisits.$inferSelect;

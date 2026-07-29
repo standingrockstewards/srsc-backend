@@ -125,3 +125,48 @@ export interface NearestMarkerResult {
   marker:        ShorelineMarker;
   distanceMiles: number;
 }
+
+// ─── Scheduled Visits (Brick 10g) ────────────────────────────────────────────
+export const VISIT_TYPES_V2 = [
+  "routine",
+  "storm_response",
+  "requested_check",
+  "pre_season_open",
+  "post_season_close",
+  "follow_up",
+] as const;
+export type VisitTypeV2 = typeof VISIT_TYPES_V2[number];
+
+export const VISIT_STATUSES = ["scheduled", "completed", "canceled", "missed"] as const;
+export type VisitStatus = typeof VISIT_STATUSES[number];
+
+export interface ScheduledVisit {
+  id:              string;
+  propertyId:      string;
+  assignedTechId:  string;
+  visitType:       string;
+  scheduledAt:     string;  // ISO datetime string
+  status:          string;
+  followUpOf:      string | null;
+  notes:           string | null;
+  createdBy:       string;
+  createdAt:       string;
+  updatedAt:       string;
+}
+
+// ─── Calendar Events (Brick 10g) ─────────────────────────────────────────────
+export type CalendarEventKind = "past_visit" | "upcoming_visit" | "storm_event" | "follow_up";
+
+export interface CalendarEvent {
+  id:              string;
+  kind:            CalendarEventKind;
+  title:           string;
+  date:            string;  // ISO datetime
+  propertyId:      string | null;
+  assignedTechId?: string;
+  status?:         string;
+  visitType?:      string;
+  followUpOf?:     string | null;
+  severity?:       string;
+  notes?:          string | null;
+}
