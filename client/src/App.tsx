@@ -26,8 +26,11 @@ import { AdminPage }      from "@/pages/AdminPage";
 import { OpsMapPage }            from "@/pages/OpsMapPage";
 import { TwoFactorSetupPage }    from "@/pages/TwoFactorSetupPage";
 import { CalendarPage }          from "@/pages/CalendarPage";
-import { KbPage }                from "@/pages/KbPage";
 import { KbEditorPage }          from "@/pages/KbEditorPage";  // Brick 10i: KB editor
+// Brick 10k: public KB pages (no auth required)
+import { KbIndexPage }           from "@/pages/KbIndexPage";
+import { KbCategoryPage }        from "@/pages/KbCategoryPage";
+import { KbArticlePage }         from "@/pages/KbArticlePage";
 
 // Bridge: registers the network error handler once ToastProvider is in scope.
 // Must be a child of ToastProvider so useToast() works.
@@ -50,6 +53,12 @@ export default function App() {
             <Routes>
               {/* Public */}
               <Route path="/login" element={<LoginPage />} />
+
+              {/* Brick 10k — Public KB pages (no auth required) */}
+              <Route path="/kb"                   element={<KbIndexPage />} />
+              <Route path="/kb/category/:slug"    element={<KbCategoryPage />} />
+              {/* /kb/:slug must come AFTER /kb/editor to avoid capturing 'editor' as slug */}
+              <Route path="/kb/:slug"              element={<KbArticlePage />} />
 
               {/* Root redirect */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -99,8 +108,8 @@ export default function App() {
                   }
                 />
 
-                {/* Brick 10i — Knowledge Base */}
-                <Route path="/kb" element={<KbPage />} />
+                {/* Brick 10i — Knowledge Base admin editor (auth required) */}
+                {/* Note: /kb index + article/category pages are now public (Brick 10k) */}
                 <Route
                   path="/kb/editor"
                   element={
