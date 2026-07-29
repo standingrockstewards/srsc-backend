@@ -22,7 +22,9 @@ import { DashboardPage }  from "@/pages/DashboardPage";
 import { PropertiesPage }     from "@/pages/PropertiesPage";
 import { PropertyDetailPage } from "@/pages/PropertyDetailPage";
 import { CustomersPage }  from "@/pages/CustomersPage";
-import { FieldOpsPage }   from "@/pages/FieldOpsPage";
+import { FieldOpsPage }      from "@/pages/FieldOpsPage";
+import { JobsPage }          from "@/pages/JobsPage";         // Brick 10T
+import { MonitoringPage }    from "@/pages/MonitoringPage";   // Brick 10T
 import { AdminPage }      from "@/pages/AdminPage";
 import { OpsMapPage }            from "@/pages/OpsMapPage";
 import { TwoFactorSetupPage }    from "@/pages/TwoFactorSetupPage";
@@ -76,7 +78,9 @@ export default function App() {
                 <Route path="/properties"     element={<PropertiesPage />} />
                 <Route path="/properties/:id" element={<PropertyDetailPage />} />
                 <Route path="/customers"  element={<CustomersPage />} />
-                <Route path="/field-ops"  element={<FieldOpsPage />} />
+                <Route path="/field-ops"     element={<FieldOpsPage />} />
+                <Route path="/jobs"          element={<JobsPage />} />
+                <Route path="/monitoring"    element={<MonitoringPage />} />
 
                 <Route
                   path="/admin"

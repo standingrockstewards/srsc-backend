@@ -71,7 +71,21 @@ const Icon = {
       <path d="M11 2l2 2v9" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
-  Logout: () => (
+  Jobs: () => (
+    <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+      <rect x="2" y="3" width="12" height="2" rx="0.5"/>
+      <rect x="2" y="7" width="9" height="2" rx="0.5"/>
+      <rect x="2" y="11" width="6" height="2" rx="0.5"/>
+      <circle cx="13" cy="12" r="2" fill="currentColor" stroke="none"/>
+    </svg>
+  ),
+  Monitoring: () => (
+    <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+      <path d="M1 8 L4 5 L6 9 L9 3 L11 7 L13 5 L15 8"/>
+      <path d="M1 12 h14" strokeDasharray="1 2"/>
+    </svg>
+  ),
+    Logout: () => (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
       <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" />
     </svg>
@@ -204,6 +218,20 @@ export function AppSidebar({
               icon={<Icon.FieldOps />}
               label="Field Ops"
               badge={badges.openJobs}
+              onNavClick={onNavClick}
+            />
+            {/* Brick 10T — Jobs page */}
+            <NavItem
+              to="/jobs"
+              icon={<Icon.Jobs />}
+              label="Jobs"
+              onNavClick={onNavClick}
+            />
+            {/* Brick 10T — Monitoring page */}
+            <NavItem
+              to="/monitoring"
+              icon={<Icon.Monitoring />}
+              label="Monitoring"
               onNavClick={onNavClick}
             />
             {/* Calendar — scheduling; visible to admin/supervisor/field_tech */}
