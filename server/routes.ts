@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import type { Server } from "http";
 import { storage, sqlite } from "./storage";
 import { sendAARForReport, buildAARPreviewHtml } from "./aar-job";
@@ -24,7 +25,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
   initPermissionsTable();
 
   // ─── BILLING (raw body needed for Stripe webhook only) ──────────────────────
-  app.use("/api/stripe/webhook", require("express").raw({ type: "application/json" }));
+  app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
   app.use("/api", billingRouter);
   // ─── QUOTE MANAGEMENT ───────────────────────────────────────────────────────
   app.use("/api", quoteRouter);

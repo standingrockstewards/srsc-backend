@@ -43,16 +43,19 @@ app.use(
 const SESSION_SECRET = process.env.SESSION_SECRET || "srsc-v2-dev-secret-change-in-prod";
 app.use(
   session({
-    name: "__Host-srsc-v2",
+    // In smoke-test mode (SMOKE_TEST=1), use an HTTP-safe cookie name and settings.
+    // The __Host- prefix requires Secure=true which only works over HTTPS.
+    name: process.env.SMOKE_TEST === "1" ? "srsc-v2-smoke" : "__Host-srsc-v2",
     secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: process.env.SMOKE_TEST === "1",
     cookie: {
       httpOnly: true,
       // SameSite=None required for cross-origin cookie (client on different origin).
       // Secure must always be true when SameSite=None.
-      secure: true,
-      sameSite: "none",
+      // In smoke-test mode over HTTP, relax both constraints.
+      secure: process.env.SMOKE_TEST !== "1",
+      sameSite: process.env.SMOKE_TEST === "1" ? "lax" : "none",
       maxAge: 8 * 60 * 60 * 1000, // 8 hours
     },
   })

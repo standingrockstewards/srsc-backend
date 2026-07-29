@@ -75,6 +75,11 @@ router.post("/login", async (req, res) => {
   const { password: _pw, totpSecret: _ts, totpBackupCodes: _bc, ...safeUser } = user as any;
   const permissions = getEffectivePermissions(user.id, user.role);
 
+  // Ensure session is persisted before responding (required for MemoryStore + saveUninitialized=true).
+  await new Promise<void>((resolve, reject) =>
+    req.session.save((err) => (err ? reject(err) : resolve()))
+  );
+
   return res.json({
     user: safeUser,
     customerId,
