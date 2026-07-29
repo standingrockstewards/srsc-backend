@@ -126,6 +126,40 @@ export interface NearestMarkerResult {
   distanceMiles: number;
 }
 
+// ─── Monitoring Events (Brick 10S) ─────────────────────────────────────────────
+export interface MonitoringEvent {
+  id:             string;
+  propertyId:     string;
+  source:         string;
+  severity:       string;  // info | warning | critical
+  category:       string;
+  payload:        string | null;
+  acknowledgedAt: string | null;
+  createdAt:      string;
+  visitType:      string | null;
+  note:           string | null;
+  latitude:       string | null;
+  longitude:      string | null;
+  visitAt:        string;
+}
+
+// ─── Retainer Ledger (Brick 10S) ─────────────────────────────────────────────
+export interface RetainerLedgerEntry {
+  id:           string;
+  propertyId:   string;
+  type:         string;  // topup | charge | credit_applied | adjustment
+  amount:       string;
+  balanceAfter: string;
+  note:         string | null;
+  createdAt:    string;
+}
+
+export interface RetainerResponse {
+  propertyId:     string;
+  currentBalance: string;
+  ledger:         RetainerLedgerEntry[];
+}
+
 // ─── Scheduled Visits (Brick 10g) ────────────────────────────────────────────
 export const VISIT_TYPES_V2 = [
   "routine",

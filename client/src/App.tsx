@@ -19,7 +19,8 @@ import { AppShell } from "@/components/AppShell";
 import { registerNetworkErrorHandler } from "@/lib/api";
 import { LoginPage }      from "@/pages/LoginPage";
 import { DashboardPage }  from "@/pages/DashboardPage";
-import { PropertiesPage } from "@/pages/PropertiesPage";
+import { PropertiesPage }     from "@/pages/PropertiesPage";
+import { PropertyDetailPage } from "@/pages/PropertyDetailPage";
 import { CustomersPage }  from "@/pages/CustomersPage";
 import { FieldOpsPage }   from "@/pages/FieldOpsPage";
 import { AdminPage }      from "@/pages/AdminPage";
@@ -72,7 +73,8 @@ export default function App() {
                 }
               >
                 <Route path="/dashboard"  element={<DashboardPage />} />
-                <Route path="/properties" element={<PropertiesPage />} />
+                <Route path="/properties"     element={<PropertiesPage />} />
+                <Route path="/properties/:id" element={<PropertyDetailPage />} />
                 <Route path="/customers"  element={<CustomersPage />} />
                 <Route path="/field-ops"  element={<FieldOpsPage />} />
 
