@@ -1046,11 +1046,80 @@ async function runRetainerTopUpChecks(): Promise<void> {
 }
 
 
+
+// ── Brick 10Y: 2FA Status Smoke (NON-MUTATING) ───────────────────────────────
+//
+// INTENTIONALLY NON-MUTATING: We do NOT call /auth/2fa/setup, /verify, or
+// /disable on the shared admin account. Automating TOTP enrollment requires a
+// live TOTP secret and a real authenticator app, and doing so in CI would
+// either lock out the account or leave it in a half-enabled state.
+//
+// What we DO check (safe, read-only):
+//   1. GET /api/v2/auth/me as admin → HTTP 200, totpEnabled field present
+//   2. GET /api/v2/auth/me returns safeUser (no totpSecret, no totpBackupCodes)
+//
+// The mutating /setup + /verify flow is covered by manual QA only.
+//
+async function run2FAStatusChecks(): Promise<void> {
+  console.log(`
+── Brick 10Y: 2FA status checks (non-mutating) ─────────────────────`);
+
+  // ── 1. GET /me — totpEnabled field present ──────────────────────────────────
+  {
+    const { status, body } = await getAuth("/api/v2/auth/me");
+    const user = (body as any)?.user;
+    const fieldPresent  = typeof user?.totpEnabled === "boolean";
+    const noSecretLeak  = !user?.totpSecret;
+    const noBackupLeak  = !user?.totpBackupCodes;
+    const allOk = status === 200 && fieldPresent && noSecretLeak && noBackupLeak;
+
+    const actual = status !== 200
+      ? `HTTP ${status}`
+      : [
+          `HTTP 200`,
+          `totpEnabled=${user?.totpEnabled}`,
+          fieldPresent ? "field_present=✓" : "field_present=✗",
+          noSecretLeak ? "no_secret_leak=✓" : "SECRET_LEAKED=✗",
+          noBackupLeak ? "no_backup_leak=✓" : "BACKUP_LEAKED=✗",
+        ].join(", ");
+
+    record(
+      "2FA status: GET /auth/me returns totpEnabled (no secret/backup leak)",
+      "HTTP 200, totpEnabled=boolean, no totpSecret, no totpBackupCodes",
+      actual,
+      allOk,
+    );
+  }
+
+  // ── 2. Unauthenticated /setup attempt → 401 (endpoint guarded) ─────────────
+  {
+    // Call /setup WITHOUT the admin session cookie
+    const res  = await fetch(`${API_BASE}/api/v2/auth/2fa/setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const ok = res.status === 401 || res.status === 403;
+    record(
+      "2FA status: POST /auth/2fa/setup without session → 401/403",
+      "HTTP 401 or 403 (auth guard)",
+      `HTTP ${res.status}`,
+      ok,
+    );
+  }
+
+  console.log(
+    "  NOTE: mutating 2FA checks (setup/verify/disable) SKIPPED intentionally. " +
+    "Reason: automating TOTP enrollment on shared demo accounts risks account " +
+    "lockout or half-enabled state. Manual QA required for the enable/disable flow.",
+  );
+}
+
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   console.log("╔═══════════════════════════════════════════════════════════════╗");
-  console.log("║        SRSC v2 API Smoke Test  —  Brick 10X                  ║");
+  console.log("║        SRSC v2 API Smoke Test  —  Brick 10Y                  ║");
   console.log("╚═══════════════════════════════════════════════════════════════╝");
 
   try {
@@ -1059,6 +1128,7 @@ async function main(): Promise<void> {
     await runKbWriteChecks();
     await runIsolationChecks();
     await runRetainerTopUpChecks();
+    await run2FAStatusChecks();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`\nUnhandled error: ${msg}`);

@@ -90,6 +90,13 @@ const Icon = {
       <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" />
     </svg>
   ),
+  // Brick 10Y: shield/lock icon for Account Security nav item
+  Security: () => (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+      <path d="M8 1L2 4v4c0 3.31 2.686 6.42 6 7 3.314-.58 6-3.69 6-7V4L8 1z" />
+      <path d="M5.5 8l1.5 1.5L10.5 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 };
 
 // ── Badge ─────────────────────────────────────────────────────────────────────
@@ -293,6 +300,19 @@ export function AppSidebar({
           </div>
         )}
 
+        {/* Brick 10Y: Account Security group — visible to every logged-in role */}
+        <div className="sidebar-group">
+          <span className="sidebar-group-label" aria-hidden="true">Account</span>
+          <ul role="list">
+            <NavItem
+              to="/account/security"
+              icon={<Icon.Security />}
+              label="Security"
+              onNavClick={onNavClick}
+            />
+          </ul>
+        </div>
+
       </nav>
 
       {/* Footer: user identity + logout */}
@@ -302,8 +322,8 @@ export function AppSidebar({
           <div className="sidebar-user-info">
             <div className="sidebar-user-name">{user?.username ?? "—"}</div>
             <div className="sidebar-user-role">{role ?? "—"}</div>
-            {/* Brick 10f: quick link to 2FA setup */}
-            <a href="/settings/2fa" className="sidebar-2fa-link">2FA Settings</a>
+            {/* Brick 10Y: link updated to new /account/security page */}
+            <a href="/account/security" className="sidebar-2fa-link">Account Security</a>
           </div>
           <button
             className="sidebar-logout-btn"

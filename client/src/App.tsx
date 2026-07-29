@@ -31,6 +31,7 @@ import { TwoFactorSetupPage }    from "@/pages/TwoFactorSetupPage";
 import { CalendarPage }          from "@/pages/CalendarPage";
 import { KbEditorPage }          from "@/pages/KbEditorPage";      // Brick 10W: KB article editor
 import { KbEditorListPage }      from "@/pages/KbEditorListPage";  // Brick 10W: KB admin list
+import { AccountSecurityPage }   from "@/pages/AccountSecurityPage"; // Brick 10Y: 2FA/TOTP security
 // Brick 10k: public KB pages (no auth required)
 import { KbIndexPage }           from "@/pages/KbIndexPage";
 import { KbCategoryPage }        from "@/pages/KbCategoryPage";
@@ -95,6 +96,9 @@ export default function App() {
                 {/* Brick 10e — Confidential Ops Map */}
                 {/* vendor + client → RequireRole redirects to /dashboard */}
                 <Route path="/settings/2fa" element={<TwoFactorSetupPage />} />
+
+                {/* Brick 10Y — Account Security (any role: each user manages own 2FA) */}
+                <Route path="/account/security" element={<AccountSecurityPage />} />
 
                 {/* Brick 10g — Calendar (admin/supervisor/field_tech) */}
                 <Route
