@@ -144,6 +144,45 @@ async function getAuthAs(path: string, cookie: string): Promise<{ status: number
   return { status: res.status, body };
 }
 
+/**
+ * POST with JSON body using global admin session cookie.
+ */
+async function postAuth(path: string, payload: unknown): Promise<{ status: number; body: unknown }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: sessionCookie },
+    body: JSON.stringify(payload),
+  });
+  let body: unknown;
+  try { body = await res.json(); } catch { body = null; }
+  return { status: res.status, body };
+}
+
+/**
+ * PATCH with JSON body using global admin session cookie.
+ */
+async function patchAuth(path: string, payload: unknown): Promise<{ status: number; body: unknown }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: sessionCookie },
+    body: JSON.stringify(payload),
+  });
+  let body: unknown;
+  try { body = await res.json(); } catch { body = null; }
+  return { status: res.status, body };
+}
+
+/**
+ * DELETE using global admin session cookie.
+ */
+async function deleteAuth(path: string): Promise<{ status: number }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: { Cookie: sessionCookie },
+  });
+  return { status: res.status };
+}
+
 function printTable(): void {
   const colW = [55, 30, 30, 10];
   const pad  = (s: string, w: number) => s.length >= w ? s.slice(0, w - 1) + "…" : s.padEnd(w);
@@ -493,6 +532,219 @@ async function runAuthChecks(): Promise<void> {
 }
 
 
+
+// ── Brick 10W: KB Write / Draft Isolation Checks ─────────────────────────────
+
+/**
+ * KB write checks (admin-only).
+ *
+ * Workflow:
+ *   1. POST  /api/v2/kb/articles  { status:"draft" }   → article created
+ *   2. GET   /api/v2/kb/articles/:slug (PUBLIC router)  → must 404 (draft hidden)
+ *   3. GET   /api/v2/kb/articles/:id   (auth router)    → must 200 (admin can see draft)
+ *   4. PATCH /api/v2/kb/articles/:id  { status:"published" } → publish
+ *   5. GET   /api/v2/kb/articles/:slug (PUBLIC router)  → must 200 (now visible)
+ *   6. DELETE /api/v2/kb/articles/:id                   → delete (data cleanup)
+ *   7. GET   /api/v2/kb/articles/:slug (PUBLIC router)  → must 404 (deleted)
+ *
+ * Uses admin session (global sessionCookie). Skipped if !HAS_CREDS.
+ * Leaves NO residual data — temp article is deleted in step 6 regardless of prior failures.
+ */
+async function runKbWriteChecks(): Promise<void> {
+  console.log(`\n── Brick 10W: KB write / draft isolation checks ────────────────────`);
+
+  if (!HAS_CREDS) {
+    console.log(`   SMOKE_USER/SMOKE_PASS not set — KB write checks SKIPPED.\n`);
+    const toSkip = [
+      "POST  /api/v2/kb/articles (create draft kbart_smoke_temp)",
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: draft must 404)",
+      "GET   /api/v2/kb/articles/:id   (AUTH admin: draft must 200)",
+      "PATCH /api/v2/kb/articles/:id { status:published }",
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: published must 200)",
+      "DELETE /api/v2/kb/articles/:id (cleanup)",
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: deleted must 404)",
+    ];
+    for (const ep of toSkip) record(ep, "—", "SKIPPED (no creds)", "skip");
+    return;
+  }
+
+  console.log(`   SMOKE_USER: ${SMOKE_USER} (admin)\n`);
+
+  // We need a valid categoryId. Fetch categories list via auth endpoint.
+  let categoryId: string | null = null;
+  try {
+    const { status, body } = await getAuth("/api/v2/kb/categories");
+    const cats = status === 200 && Array.isArray(body) ? body as Array<{ id: string }> : [];
+    categoryId = cats[0]?.id ?? null;
+  } catch { /* leave null */ }
+
+  if (!categoryId) {
+    record(
+      "POST  /api/v2/kb/articles (create draft kbart_smoke_temp)",
+      "HTTP 201",
+      "SKIPPED — could not resolve a categoryId from /api/v2/kb/categories",
+      "skip",
+    );
+    for (const ep of [
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: draft must 404)",
+      "GET   /api/v2/kb/articles/:id   (AUTH admin: draft must 200)",
+      "PATCH /api/v2/kb/articles/:id { status:published }",
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: published must 200)",
+      "DELETE /api/v2/kb/articles/:id (cleanup)",
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: deleted must 404)",
+    ]) record(ep, "—", "SKIPPED (no categoryId)", "skip");
+    return;
+  }
+
+  const SMOKE_SLUG  = "kbart-smoke-temp";
+  const SMOKE_TITLE = "Smoke test temp article (auto-deleted)";
+  let   articleId: string | null = null;
+
+  // ── Step 1: Create draft ─────────────────────────────────────────────────
+  {
+    const { status, body } = await postAuth("/api/v2/kb/articles", {
+      categoryId,
+      title:  SMOKE_TITLE,
+      slug:   SMOKE_SLUG,
+      bodyMd: "This article is created and deleted by the smoke test. Do not edit.",
+      tags:   ["smoke-test"],
+      status: "draft",
+    });
+    const id = (body as any)?.id ?? null;
+    if (status === 201 && id) {
+      articleId = String(id);
+    } else if (status === 409) {
+      // Leftover from a previous failed smoke run — fetch its ID and reuse
+      const { status: gs, body: gb } = await getAuth(`/api/v2/kb/articles/${SMOKE_SLUG}`);
+      if (gs === 200 && (gb as any)?.id) {
+        articleId = String((gb as any).id);
+        record(
+          "POST  /api/v2/kb/articles (create draft kbart_smoke_temp)",
+          "HTTP 201",
+          `HTTP 409 (slug exists from prior run) — recovered existing id=${articleId}`,
+          true,   // recoverable — not a test failure
+        );
+      } else {
+        record(
+          "POST  /api/v2/kb/articles (create draft kbart_smoke_temp)",
+          "HTTP 201",
+          `HTTP 409 and could not recover existing article`,
+          false,
+        );
+      }
+    } else {
+      record(
+        "POST  /api/v2/kb/articles (create draft kbart_smoke_temp)",
+        "HTTP 201",
+        status !== 201 ? `HTTP ${status}` : `HTTP 201 but no id in body`,
+        false,
+      );
+    }
+
+    if (status === 201) {
+      record(
+        "POST  /api/v2/kb/articles (create draft kbart_smoke_temp)",
+        "HTTP 201",
+        `HTTP 201, id=${articleId}`,
+        true,
+      );
+    }
+  }
+
+  // If we still have no ID, skip remaining checks
+  if (!articleId) {
+    for (const ep of [
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: draft must 404)",
+      "GET   /api/v2/kb/articles/:id   (AUTH admin: draft must 200)",
+      "PATCH /api/v2/kb/articles/:id { status:published }",
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: published must 200)",
+      "DELETE /api/v2/kb/articles/:id (cleanup)",
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: deleted must 404)",
+    ]) record(ep, "—", "SKIPPED (create failed)", "skip");
+    return;
+  }
+
+  // ── Step 2: Draft must NOT appear on public endpoint ────────────────────
+  {
+    // Public router: kbPublicRouter at /api/v2/kb/articles/:slug — no auth, published only
+    const res  = await fetch(`${API_BASE}/api/v2/kb/articles/${SMOKE_SLUG}`);
+    const stat = res.status;
+    record(
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: draft must 404)",
+      "HTTP 404 (draft hidden from public)",
+      `HTTP ${stat}`,
+      stat === 404,
+    );
+  }
+
+  // ── Step 3: Admin can reach draft via PATCH (auth-only endpoint; public router has no PATCH) ──
+  // Architecture note: GET /api/v2/kb/articles* routes are shadowed by kbPublicRouter
+  // (mounted before requireAuthV2), so GET-by-ID/slug for drafts is not reachable via smoke.
+  // PATCH /articles/:id is exclusive to the auth router — we use a no-op PATCH (send only
+  // status:draft again) to confirm the article exists and is accessible to admin while a draft.
+  {
+    const { status, body } = await patchAuth(`/api/v2/kb/articles/${articleId}`, {
+      status: "draft",  // no-op: keep draft, just confirm auth access
+    });
+    const s = (body as any)?.status ?? "(none)";
+    record(
+      "PATCH /api/v2/kb/articles/:id no-op (AUTH admin: draft accessible, status=draft)",
+      "HTTP 200, status=draft",
+      status !== 200 ? `HTTP ${status}` : `HTTP 200, status=${s}`,
+      status === 200 && s === "draft",
+    );
+  }
+
+  // ── Step 4: Publish the article ──────────────────────────────────────────
+  {
+    const { status, body } = await patchAuth(`/api/v2/kb/articles/${articleId}`, {
+      status: "published",
+    });
+    const s = (body as any)?.status ?? "(none)";
+    record(
+      "PATCH /api/v2/kb/articles/:id { status:published }",
+      "HTTP 200, status=published",
+      status !== 200 ? `HTTP ${status}` : `HTTP 200, status=${s}`,
+      status === 200 && s === "published",
+    );
+  }
+
+  // ── Step 5: Published article IS visible on public endpoint ─────────────
+  {
+    const res  = await fetch(`${API_BASE}/api/v2/kb/articles/${SMOKE_SLUG}`);
+    const stat = res.status;
+    record(
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: published must 200)",
+      "HTTP 200 (published visible to public)",
+      `HTTP ${stat}`,
+      stat === 200,
+    );
+  }
+
+  // ── Step 6: Delete (cleanup) — runs even if earlier steps failed ────────
+  {
+    const { status } = await deleteAuth(`/api/v2/kb/articles/${articleId}`);
+    record(
+      "DELETE /api/v2/kb/articles/:id (cleanup)",
+      "HTTP 204",
+      `HTTP ${status}`,
+      status === 204,
+    );
+  }
+
+  // ── Step 7: Deleted article is gone from public endpoint ─────────────────
+  {
+    const res  = await fetch(`${API_BASE}/api/v2/kb/articles/${SMOKE_SLUG}`);
+    const stat = res.status;
+    record(
+      "GET   /api/v2/kb/articles/:slug (PUBLIC: deleted must 404)",
+      "HTTP 404 (article deleted, gone from public)",
+      `HTTP ${stat}`,
+      stat === 404,
+    );
+  }
+}
+
 // ── Brick 10V: Tenant Isolation Checks ────────────────────────────────────────
 
 /**
@@ -665,12 +917,13 @@ async function runIsolationChecks(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("╔═══════════════════════════════════════════════════════════════╗");
-  console.log("║        SRSC v2 API Smoke Test  —  Brick 10V                  ║");
+  console.log("║        SRSC v2 API Smoke Test  —  Brick 10W                  ║");
   console.log("╚═══════════════════════════════════════════════════════════════╝");
 
   try {
     await runPublicChecks();
     await runAuthChecks();
+    await runKbWriteChecks();
     await runIsolationChecks();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

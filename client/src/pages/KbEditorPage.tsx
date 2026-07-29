@@ -1,42 +1,55 @@
 /**
- * src/pages/KbEditorPage.tsx  (Brick 10i)
+ * src/pages/KbEditorPage.tsx  (Brick 10W — replaces 10i stub)
  *
  * Admin KB article editor — create or edit an article.
  *
- * Route:
- *   /kb/editor          → new article
- *   /kb/editor/:id      → edit existing
+ * Routes (wired in App.tsx):
+ *   /kb/editor/new        → create new article (default status = draft)
+ *   /kb/editor/:id        → edit existing article
  *
- * Roles: admin, supervisor only (RequireRole in App.tsx).
+ * Roles: admin, supervisor only (RequireRole enforced in App.tsx).
  *
- * Features:
- *   - Title, category, asset_type, status (draft/published), tags (comma-separated input),
- *     full Markdown body textarea with live character count.
- *   - Auto-generates a slug from the title (editable).
- *   - Saves draft on first save; publish flips status to published.
- *   - updated_at + published_at enforced server-side (no frontend hacks).
- *   - After save: redirect to /kb.
+ * Features (Brick 10W):
+ *   - Title, slug (auto-generated, editable), category, tags, asset_type,
+ *     status (draft/published), full Markdown body textarea.
+ *   - Live Markdown preview via kbMarkdown.mdToHtml (same safe renderer as public reader).
+ *   - Create via POST /api/v2/kb/articles (new articles default to draft).
+ *   - Update via PATCH /api/v2/kb/articles/:id.
+ *   - Publish/unpublish toggle — PATCH { status: "published"|"draft" }.
+ *   - Delete via DELETE /api/v2/kb/articles/:id — requires in-UI confirm dialog.
+ *   - Client-side validation: required title/slug/category.
+ *   - Slug uniqueness error surfaced from API 409 — does not crash.
+ *   - published_at semantics preserved server-side (COALESCE in repo).
+ *   - After create → redirect to /kb/editor/:newId so user can keep editing.
+ *   - Breadcrumb nav back to /kb/editor (admin list).
+ *
+ * Data safety:
+ *   - New articles default to draft. Auto-publish is NEVER performed.
+ *   - Editing an existing article does NOT change published_at unless
+ *     the user explicitly flips status to published (server handles COALESCE).
+ *   - Seeded articles are unaffected unless the user opens and saves them.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
+import { mdToHtml } from "@/lib/kbMarkdown";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface KbCategory {
-  id: string;
+  id:   string;
   name: string;
 }
 
 interface ArticleForm {
-  categoryId:  string;
-  title:       string;
-  slug:        string;
-  bodyMd:      string;
-  tags:        string;      // comma-separated string in the UI
-  assetType:   string;
-  status:      "draft" | "published";
+  categoryId: string;
+  title:      string;
+  slug:       string;
+  bodyMd:     string;
+  tags:       string;    // comma-separated string in the UI
+  assetType:  string;
+  status:     "draft" | "published";
 }
 
 const EMPTY_FORM: ArticleForm = {
@@ -46,14 +59,14 @@ const EMPTY_FORM: ArticleForm = {
   bodyMd:     "",
   tags:       "",
   assetType:  "",
-  status:     "draft",
+  status:     "draft",  // new articles always start as draft
 };
 
 const ASSET_TYPES = ["guide", "tip", "regulation", "how-to", "faq", "alert"];
 
 // ── Slug helper ────────────────────────────────────────────────────────────────
 
-function slugify(s: string) {
+function slugify(s: string): string {
   return s
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
@@ -66,55 +79,71 @@ function slugify(s: string) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function KbEditorPage() {
-  const { id }    = useParams<{ id?: string }>();
-  const navigate  = useNavigate();
-  const isEdit    = Boolean(id);
+  // :id is either a real article ID or the literal string "new"
+  const { id } = useParams<{ id?: string }>();
+  const navigate = useNavigate();
 
-  const [categories, setCategories] = useState<KbCategory[]>([]);
-  const [form,       setForm]       = useState<ArticleForm>(EMPTY_FORM);
-  const [slugEdited, setSlugEdited] = useState(false);
-  const [saving,     setSaving]     = useState(false);
-  const [loading,    setLoading]    = useState(isEdit);
-  const [error,      setError]      = useState<string | null>(null);
-  const [success,    setSuccess]    = useState<string | null>(null);
+  const isNew    = !id || id === "new";
+  const isEdit   = !isNew;
+  const articleId = isEdit ? id! : null;
 
-  // ── Load categories ─────────────────────────────────────────────────────
+  const [categories,  setCategories]  = useState<KbCategory[]>([]);
+  const [form,        setForm]        = useState<ArticleForm>(EMPTY_FORM);
+  const [slugEdited,  setSlugEdited]  = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [loading,     setLoading]     = useState(isEdit);
+  const [error,       setError]       = useState<string | null>(null);
+  const [success,     setSuccess]     = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [confirmDel,  setConfirmDel]  = useState(false);
+  const [deleting,    setDeleting]    = useState(false);
+
+  // Track original status so publish toggle is meaningful
+  const originalStatus = useRef<"draft" | "published">("draft");
+
+  // ── Load categories ──────────────────────────────────────────────────────
+
   useEffect(() => {
     apiFetch("/kb/categories")
       .then((cats) => setCategories(cats as KbCategory[]))
       .catch(() => setError("Failed to load categories."));
   }, []);
 
-  // ── Load article if editing ─────────────────────────────────────────────
+  // ── Load article if editing ──────────────────────────────────────────────
+
   useEffect(() => {
-    if (!isEdit || !id) return;
-    apiFetch(`/kb/articles/${id}`)
+    if (!isEdit || !articleId) return;
+    setLoading(true);
+    apiFetch(`/kb/articles/${articleId}`)
       .then((art: any) => {
-        setForm({
+        const loaded: ArticleForm = {
           categoryId: art.categoryId ?? "",
           title:      art.title      ?? "",
           slug:       art.slug       ?? "",
           bodyMd:     art.bodyMd     ?? "",
-          tags:       (art.tags ?? []).join(", "),
+          tags:       Array.isArray(art.tags) ? art.tags.join(", ") : "",
           assetType:  art.assetType  ?? "",
-          status:     art.status     ?? "draft",
-        });
-        setSlugEdited(true); // Don't auto-overwrite existing slug
+          status:     art.status === "published" ? "published" : "draft",
+        };
+        setForm(loaded);
+        originalStatus.current = loaded.status;
+        setSlugEdited(true); // don't auto-overwrite existing slug on title change
         setLoading(false);
       })
       .catch(() => {
         setError("Failed to load article.");
         setLoading(false);
       });
-  }, [id, isEdit]);
+  }, [articleId, isEdit]);
 
-  // ── Field handlers ──────────────────────────────────────────────────────
-  const set = (field: keyof ArticleForm) =>
+  // ── Field handlers ───────────────────────────────────────────────────────
+
+  const set =
+    (field: keyof ArticleForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       const val = e.target.value;
       setForm((prev) => {
         const next = { ...prev, [field]: val };
-        // Auto-generate slug from title unless user manually edited it
         if (field === "title" && !slugEdited) {
           next.slug = slugify(val);
         }
@@ -124,51 +153,106 @@ export function KbEditorPage() {
 
   const onSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSlugEdited(true);
-    setForm((prev) => ({ ...prev, slug: e.target.value }));
+    setForm((prev) => ({ ...prev, slug: slugify(e.target.value) }));
   };
 
-  // ── Save ────────────────────────────────────────────────────────────────
-  const handleSave = async (publishNow: boolean) => {
+  // ── Build payload ────────────────────────────────────────────────────────
+
+  const buildPayload = (overrideStatus?: "draft" | "published") => ({
+    categoryId: form.categoryId,
+    title:      form.title.trim(),
+    slug:       form.slug.trim(),
+    bodyMd:     form.bodyMd,
+    tags:       form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+    assetType:  form.assetType || null,
+    status:     overrideStatus ?? form.status,
+  });
+
+  // ── Validate ─────────────────────────────────────────────────────────────
+
+  const validate = (): boolean => {
+    if (!form.categoryId) { setError("Please select a category."); return false; }
+    if (!form.title.trim()) { setError("Title is required."); return false; }
+    if (!form.slug.trim())  { setError("Slug is required."); return false; }
+    return true;
+  };
+
+  // ── Save (draft or explicit status) ─────────────────────────────────────
+
+  const handleSave = async (overrideStatus?: "draft" | "published") => {
     setError(null);
     setSuccess(null);
-    if (!form.categoryId) { setError("Please select a category."); return; }
-    if (!form.title.trim()) { setError("Title is required."); return; }
-    if (!form.slug.trim())  { setError("Slug is required."); return; }
+    if (!validate()) return;
 
-    const payload = {
-      categoryId: form.categoryId,
-      title:      form.title.trim(),
-      slug:       form.slug.trim(),
-      bodyMd:     form.bodyMd,
-      tags:       form.tags.split(",").map((t) => t.trim()).filter(Boolean),
-      assetType:  form.assetType || null,
-      status:     publishNow ? "published" : form.status,
-    };
-
+    const payload = buildPayload(overrideStatus);
     setSaving(true);
     try {
-      if (isEdit && id) {
-        await apiFetch(`/kb/articles/${id}`, { method: "PATCH", body: JSON.stringify(payload), headers: { "Content-Type": "application/json" } });
-        setSuccess("Article updated.");
+      if (isEdit && articleId) {
+        await apiFetch(`/kb/articles/${articleId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        setForm((prev) => ({ ...prev, status: payload.status as "draft" | "published" }));
+        originalStatus.current = payload.status as "draft" | "published";
+        setSuccess(payload.status === "published" ? "Article published." : "Draft saved.");
       } else {
-        await apiFetch("/kb/articles", { method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "application/json" } });
-        setSuccess("Article created.");
+        // Create — force status = draft (never auto-publish new articles)
+        const createPayload = { ...payload, status: "draft" };
+        const created = await apiFetch("/kb/articles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createPayload),
+        }) as { id: string };
+        // Redirect to edit route so user can continue editing the new article
+        navigate(`/kb/editor/${created.id}`, { replace: true });
+        return;
       }
-      setTimeout(() => navigate("/kb"), 800);
     } catch (err: any) {
-      setError(err?.message ?? "Failed to save article.");
+      const msg: string = err?.message ?? "Failed to save article.";
+      if (msg.includes("409") || msg.toLowerCase().includes("slug already exists")) {
+        setError("That slug is already in use. Please choose a different slug.");
+      } else if (msg.includes("400") || msg.toLowerCase().includes("invalid categoryid")) {
+        setError("Invalid category. Please select a valid category.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Publish / unpublish toggle ───────────────────────────────────────────
+
+  const handlePublishToggle = async () => {
+    const nextStatus = form.status === "published" ? "draft" : "published";
+    await handleSave(nextStatus);
+  };
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  const handleDelete = async () => {
+    if (!articleId) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/kb/articles/${articleId}`, { method: "DELETE" });
+      navigate("/kb/editor", { replace: true });
+    } catch {
+      setError("Failed to delete article.");
+      setConfirmDel(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ── Loading skeleton ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="page-content">
-        <div style={{ maxWidth: 760, margin: "0 auto" }}>
-          <div className="skeleton" style={{ height: 36, width: 200, marginBottom: 24 }} />
+        <div style={{ maxWidth: 860, margin: "0 auto" }}>
+          <div className="skeleton" style={{ height: 36, width: 220, marginBottom: 24 }} />
+          <div className="skeleton" style={{ height: 48, marginBottom: 16 }} />
           <div className="skeleton" style={{ height: 48, marginBottom: 16 }} />
           <div className="skeleton" style={{ height: 300 }} />
         </div>
@@ -176,35 +260,58 @@ export function KbEditorPage() {
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const isPublished = form.status === "published";
+
   return (
     <div className="page-content">
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
+      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+
+        {/* Breadcrumb header */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          marginBottom: 24, flexWrap: "wrap",
+        }}>
           <button
             className="btn btn--ghost"
-            style={{ display: "flex", alignItems: "center", gap: 6 }}
-            onClick={() => navigate("/kb")}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}
+            onClick={() => navigate("/kb/editor")}
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"
+              stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <path d="M10 3L5 8l5 5" />
             </svg>
-            Knowledge Base
+            KB Admin
           </button>
           <span style={{ color: "var(--text-muted, #6b7280)" }}>/</span>
-          <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>
-            {isEdit ? "Edit Article" : "New Article"}
+          <h1 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0, flex: 1 }}>
+            {isNew ? "New Article" : "Edit Article"}
           </h1>
+
+          {/* Status badge */}
+          {isEdit && (
+            <span style={{
+              padding: "3px 12px", borderRadius: 9999, fontSize: 12, fontWeight: 600,
+              background: isPublished ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)",
+              color: isPublished ? "var(--status-ok, #22c55e)" : "var(--status-warn, #f59e0b)",
+            }}>
+              {isPublished ? "Published" : "Draft"}
+            </span>
+          )}
         </div>
 
+        {/* Alerts */}
         {error   && <div className="alert alert--error"   style={{ marginBottom: 16 }}>{error}</div>}
         {success && <div className="alert alert--success" style={{ marginBottom: 16 }}>{success}</div>}
 
-        <form onSubmit={(e) => { e.preventDefault(); handleSave(false); }} noValidate>
+        <form onSubmit={(e) => { e.preventDefault(); void handleSave(); }} noValidate>
 
           {/* Title */}
           <div className="form-group">
-            <label className="form-label" htmlFor="kb-title">Title <span aria-hidden="true" style={{ color: "#ef4444" }}>*</span></label>
+            <label className="form-label" htmlFor="kb-title">
+              Title <span aria-hidden="true" style={{ color: "#ef4444" }}>*</span>
+            </label>
             <input
               id="kb-title"
               className="input"
@@ -221,8 +328,11 @@ export function KbEditorPage() {
           <div className="form-group">
             <label className="form-label" htmlFor="kb-slug">
               Slug
-              <span style={{ fontSize: 12, color: "var(--text-muted, #6b7280)", marginLeft: 6, fontWeight: 400 }}>
-                (auto-generated; edit to customize URL)
+              <span style={{
+                fontSize: 12, color: "var(--text-muted, #6b7280)",
+                marginLeft: 6, fontWeight: 400,
+              }}>
+                auto-generated · editable
               </span>
             </label>
             <input
@@ -278,8 +388,11 @@ export function KbEditorPage() {
           <div className="form-group">
             <label className="form-label" htmlFor="kb-tags">
               Tags
-              <span style={{ fontSize: 12, color: "var(--text-muted, #6b7280)", marginLeft: 6, fontWeight: 400 }}>
-                comma-separated, e.g. bass, crappie, topwater
+              <span style={{
+                fontSize: 12, color: "var(--text-muted, #6b7280)",
+                marginLeft: 6, fontWeight: 400,
+              }}>
+                comma-separated
               </span>
             </label>
             <input
@@ -293,7 +406,7 @@ export function KbEditorPage() {
             />
           </div>
 
-          {/* Status (for edit mode — new drafts default to draft) */}
+          {/* Status (edit mode only — new articles are always draft) */}
           {isEdit && (
             <div className="form-group">
               <label className="form-label" htmlFor="kb-status">Status</label>
@@ -310,54 +423,200 @@ export function KbEditorPage() {
             </div>
           )}
 
-          {/* Body */}
+          {/* Body — editor / preview toggle */}
           <div className="form-group">
-            <label className="form-label" htmlFor="kb-body">
-              Content (Markdown)
-              <span style={{ fontSize: 12, color: "var(--text-muted, #6b7280)", marginLeft: 6, fontWeight: 400 }}>
-                {form.bodyMd.length} chars
-              </span>
-            </label>
-            <textarea
-              id="kb-body"
-              className="input"
-              value={form.bodyMd}
-              onChange={set("bodyMd")}
-              placeholder={"# Heading\n\nStart writing your article here. Markdown is supported.\n\n- Bullet points\n- work like this\n\n**Bold** and *italic* text are supported."}
-              rows={20}
-              style={{ width: "100%", fontFamily: "monospace", fontSize: 13, resize: "vertical" }}
-            />
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              marginBottom: 8,
+            }}>
+              <label className="form-label" htmlFor="kb-body" style={{ margin: 0 }}>
+                Content (Markdown)
+                <span style={{
+                  fontSize: 12, color: "var(--text-muted, #6b7280)",
+                  marginLeft: 6, fontWeight: 400,
+                }}>
+                  {form.bodyMd.length.toLocaleString()} chars
+                </span>
+              </label>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                style={{ fontSize: 12, padding: "3px 10px" }}
+                onClick={() => setShowPreview((p) => !p)}
+              >
+                {showPreview ? "Edit" : "Preview"}
+              </button>
+            </div>
+
+            {showPreview ? (
+              /* Live preview — uses same safe mdToHtml renderer as public reader */
+              <div
+                className="kb-article-body"
+                style={{
+                  minHeight: 320,
+                  padding: "16px 20px",
+                  background: "var(--bg-input, #f9fafb)",
+                  border: "1px solid var(--border, #e5e7eb)",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  lineHeight: 1.7,
+                  overflowY: "auto",
+                }}
+                dangerouslySetInnerHTML={{ __html: mdToHtml(form.bodyMd) }}
+              />
+            ) : (
+              <textarea
+                id="kb-body"
+                className="input"
+                value={form.bodyMd}
+                onChange={set("bodyMd")}
+                placeholder={"# Heading\n\nStart writing your article here.\n\n- Bullet points\n- work like this\n\n**Bold** and *italic* text are supported."}
+                rows={22}
+                style={{
+                  width: "100%", fontFamily: "monospace",
+                  fontSize: 13, resize: "vertical",
+                }}
+              />
+            )}
           </div>
 
-          {/* Action buttons */}
-          <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", paddingTop: 8 }}>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => navigate("/kb")}
-              disabled={saving}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn btn--secondary"
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save Draft"}
-            </button>
-            <button
-              type="button"
-              className="btn btn--primary"
-              disabled={saving}
-              onClick={() => handleSave(true)}
-            >
-              {saving ? "Publishing…" : (isEdit && form.status === "published") ? "Update & Publish" : "Publish"}
-            </button>
+          {/* Action bar */}
+          <div style={{
+            display: "flex", gap: 10, justifyContent: "space-between",
+            paddingTop: 8, flexWrap: "wrap", alignItems: "center",
+          }}>
+            {/* Left: delete (edit mode only) */}
+            <div>
+              {isEdit && (
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  style={{ color: "var(--status-err, #ef4444)", fontSize: 13 }}
+                  onClick={() => setConfirmDel(true)}
+                  disabled={saving || deleting}
+                >
+                  Delete article
+                </button>
+              )}
+            </div>
+
+            {/* Right: cancel / save draft / publish toggle */}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => navigate("/kb/editor")}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="btn btn--secondary"
+                disabled={saving}
+              >
+                {saving ? "Saving…" : isNew ? "Save Draft" : "Save Changes"}
+              </button>
+
+              {/* Publish toggle — only visible in edit mode */}
+              {isEdit && (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={saving}
+                  onClick={() => void handlePublishToggle()}
+                  style={isPublished ? {
+                    background: "var(--status-warn, #f59e0b)",
+                    borderColor: "var(--status-warn, #f59e0b)",
+                  } : {}}
+                >
+                  {saving
+                    ? "…"
+                    : isPublished
+                    ? "Unpublish"
+                    : "Publish"}
+                </button>
+              )}
+
+              {/* New article: single "Publish" button that saves then you can promote later */}
+              {isNew && (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={saving}
+                  title="Saves as draft first; you can publish from the edit screen"
+                  onClick={() => void handleSave()}
+                >
+                  {saving ? "Saving…" : "Create Draft"}
+                </button>
+              )}
+            </div>
           </div>
 
         </form>
       </div>
+
+      {/* ── Delete confirm dialog ─────────────────────────────────────────────── */}
+      {confirmDel && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="del-modal-title"
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(0,0,0,0.45)",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirmDel(false); }}
+        >
+          <div style={{
+            background: "var(--bg-card, #fff)",
+            borderRadius: 12, padding: 28, maxWidth: 420, width: "90%",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+          }}>
+            <h2
+              id="del-modal-title"
+              style={{ fontSize: "1.1rem", fontWeight: 700, margin: "0 0 12px 0" }}
+            >
+              Delete article?
+            </h2>
+            <p style={{ margin: "0 0 8px 0", color: "var(--text-muted, #6b7280)" }}>
+              <strong style={{ color: "inherit" }}>"{form.title || "Untitled"}"</strong> will be
+              permanently deleted.
+            </p>
+            {isPublished && (
+              <p style={{
+                margin: "0 0 20px 0", fontSize: 13,
+                color: "var(--status-warn, #f59e0b)", fontWeight: 500,
+              }}>
+                This article is currently published. Clients will immediately lose access.
+              </p>
+            )}
+            {!isPublished && <div style={{ marginBottom: 20 }} />}
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button
+                className="btn btn--ghost"
+                onClick={() => setConfirmDel(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn--primary"
+                style={{
+                  background: "var(--status-err, #ef4444)",
+                  borderColor: "var(--status-err, #ef4444)",
+                }}
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

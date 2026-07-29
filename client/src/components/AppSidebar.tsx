@@ -282,6 +282,13 @@ export function AppSidebar({
                 badge={badges.pendingReferrals}
                 onNavClick={onNavClick}
               />
+              {/* Brick 10W: KB admin write UI — admin/supervisor only */}
+              <NavItem
+                to="/kb/editor"
+                icon={<Icon.KnowledgeBase />}
+                label="KB Admin"
+                onNavClick={onNavClick}
+              />
             </ul>
           </div>
         )}

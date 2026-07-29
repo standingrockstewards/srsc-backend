@@ -29,7 +29,8 @@ import { AdminPage }      from "@/pages/AdminPage";
 import { OpsMapPage }            from "@/pages/OpsMapPage";
 import { TwoFactorSetupPage }    from "@/pages/TwoFactorSetupPage";
 import { CalendarPage }          from "@/pages/CalendarPage";
-import { KbEditorPage }          from "@/pages/KbEditorPage";  // Brick 10i: KB editor
+import { KbEditorPage }          from "@/pages/KbEditorPage";      // Brick 10W: KB article editor
+import { KbEditorListPage }      from "@/pages/KbEditorListPage";  // Brick 10W: KB admin list
 // Brick 10k: public KB pages (no auth required)
 import { KbIndexPage }           from "@/pages/KbIndexPage";
 import { KbCategoryPage }        from "@/pages/KbCategoryPage";
@@ -114,10 +115,20 @@ export default function App() {
                   }
                 />
 
-                {/* Brick 10i — Knowledge Base admin editor (auth required) */}
-                {/* Note: /kb index + article/category pages are now public (Brick 10k) */}
+                {/* Brick 10W — KB admin write UI */}
+                {/* /kb/editor          → KbEditorListPage (admin article table) */}
+                {/* /kb/editor/new      → KbEditorPage (create) */}
+                {/* /kb/editor/:id      → KbEditorPage (edit existing) */}
                 <Route
                   path="/kb/editor"
+                  element={
+                    <RequireRole roles={["admin", "supervisor"]}>
+                      <KbEditorListPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/kb/editor/new"
                   element={
                     <RequireRole roles={["admin", "supervisor"]}>
                       <KbEditorPage />
