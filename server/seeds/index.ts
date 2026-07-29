@@ -17,6 +17,7 @@
 //   3. server/seeds/monitoring_events.seed.ts  — Brick 10N: 12 demo monitoring events (depends on 10M properties)
 //   4. server/seeds/retainer_ledger.seed.ts     — Brick 10O: 14 demo retainer ledger entries (depends on 10M properties)
 //   5. server/seeds/billing_state_log.seed.ts   — Brick 10O: 5 demo billing state transitions (depends on 10M properties)
+//   6. server/seeds/stewardship_jobs.seed.ts     — Brick 10P: 10 demo stewardship jobs (depends on 10M properties + 10N events)
 //
 // Running `npx tsx server/seeds/<file>.seed.ts` directly executes that seed.
 // This index file serves as the canonical registry of all seeds.
