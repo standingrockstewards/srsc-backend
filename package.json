@@ -93,8 +93,7 @@
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0",
-    "esbuild": "^0.25.0"
+    "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
@@ -117,7 +116,8 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
-    "vite": "^7.3.0"
+    "vite": "^7.3.0",
+    "esbuild": "^0.25.0"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
