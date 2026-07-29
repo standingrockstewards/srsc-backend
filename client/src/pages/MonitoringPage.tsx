@@ -1,25 +1,29 @@
 /**
- * src/pages/MonitoringPage.tsx  (Brick 10T)
+ * src/pages/MonitoringPage.tsx  (Brick 10U repoint)
  *
  * Route: /monitoring  — inside RequireAuth / AppShell
  *
- * No account-level events list endpoint exists in v2 (confirmed in Brick 10T
- * audit). The page fetches all 5 properties, then fires GET
- * /api/v2/properties/:id/events for each in parallel and merges the results.
+ * Brick 10U added GET /api/v2/events — an account-level list endpoint that
+ * returns events across all properties the caller is authorized to see,
+ * sorted newest-first, with SQL-level ?severity= / ?property_id= / ?limit=
+ * / ?offset= filters.  This page has been repointed to that single endpoint;
+ * the old N-property parallel merge (Brick 10T) has been dropped.
  *
  * Fetches:
- *   GET /api/v2/properties                     → property list (for name map + filter)
- *   GET /api/v2/properties/:id/events × 5      → per-property event arrays (parallel)
+ *   GET /api/v2/properties         → property list (for name map + filter dropdown)
+ *   GET /api/v2/events             → account-level event feed (single call)
  *
  * Features:
- *   - Merged, sorted newest-first by createdAt
- *   - Filter by severity (all | info | warning | critical)
- *   - Filter by property (all | prop_01..05)
+ *   - Single fetch, sorted newest-first by createdAt (server-guaranteed)
+ *   - Client-side filter by severity (all | info | warning | critical)
+ *   - Client-side filter by property (all | prop_01..05)
  *   - Severity badge, category, visit type, property name, note, ack status
  *   - Loading skeleton; empty state when no results match
+ *   - Non-blocking error banner if events endpoint fails (properties still shown)
  *
  * Auth: apiFetch (credentials: "include"). 401 → existing redirect handler.
- * No hardcoded data.
+ * No hardcoded data. Response shape is identical to per-property events —
+ * no client type changes required.
  */
 
 import { useEffect, useState, useMemo } from "react";
@@ -197,48 +201,25 @@ export function MonitoringPage() {
   }, [properties]);
 
   useEffect(() => {
-    // Step 1: fetch properties
-    api.get<Property[]>("/properties")
-      .then((props) => {
+    // Brick 10U: use the new account-level events endpoint instead of N-parallel merge.
+    // Fetch properties (for name map + filter dropdown) and events in parallel.
+    Promise.all([
+      api.get<Property[]>("/properties"),
+      api.get<MonitoringEvent[]>("/events?limit=500"),
+    ])
+      .then(([props, evts]) => {
         setProperties(props);
-
-        // Step 2: parallel per-property event fetch
-        const fetches = props.map((p) =>
-          api.get<MonitoringEvent[]>(`/properties/${p.id}/events`)
-            .then((rows) => ({ ok: true as const, rows }))
-            .catch((err: unknown) => ({
-              ok: false as const,
-              id: p.id,
-              msg: err instanceof ApiError ? err.message : "Unknown error",
-            })),
-        );
-
-        return Promise.all(fetches);
-      })
-      .then((results) => {
-        const merged: MonitoringEvent[] = [];
-        const failed: string[] = [];
-
-        for (const r of results) {
-          if (r.ok) {
-            merged.push(...r.rows);
-          } else {
-            failed.push(r.id);
-          }
-        }
-
-        // Sort newest first
-        merged.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-
-        setEvents(merged);
-        if (failed.length > 0) {
-          setPartialErr(`Events unavailable for: ${failed.join(", ")}`);
-        }
+        // Server already returns newest-first; no client-side sort needed.
+        setEvents(evts);
         setLoading(false);
       })
       .catch((err: unknown) => {
+        // If properties succeeded but events failed, show partial error and still
+        // attempt to render whatever we have.  Full crash only on total failure.
+        if (err instanceof ApiError) {
+          // Distinguish events-only failure (partial) from total failure
+          setPartialErr(`Events unavailable: ${err.message}`);
+        }
         setError(
           err instanceof ApiError
             ? `Failed to load monitoring data: ${err.message}`

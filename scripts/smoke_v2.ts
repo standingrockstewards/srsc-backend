@@ -400,13 +400,57 @@ async function runAuthChecks(): Promise<void> {
       !fetchErr && allMatch,
     );
   }
+
+  // 12. Account-level events list — GET /api/v2/events (Brick 10U)
+  //     Expects 12 demo events (mevt_01..12) across all 5 properties, newest-first.
+  {
+    const { status, body } = await getAuth("/api/v2/events?limit=500");
+    const arr  = status === 200 && Array.isArray(body) ? body : [];
+    const demo = arr.filter((e: any) => /^mevt_\d+$/.test(e.id ?? "")).length;
+
+    // Verify newest-first ordering
+    let ordered = true;
+    for (let i = 1; i < arr.length; i++) {
+      const a = new Date(arr[i - 1].createdAt ?? 0).getTime();
+      const b = new Date(arr[i].createdAt     ?? 0).getTime();
+      if (a < b) { ordered = false; break; }
+    }
+
+    record(
+      "GET  /api/v2/events (account-level list — 12 demo events)",
+      "HTTP 200, 12 mevt_* events, newest-first",
+      status !== 200
+        ? `HTTP ${status}`
+        : `HTTP 200, ${demo} mevt_* events, ordered=${ordered}`,
+      status === 200 && demo === 12 && ordered,
+    );
+  }
+
+  // 13. Account-level events — severity filter (?severity=critical → 1 event)
+  //     mevt_08 is the only critical event across all seeded properties.
+  {
+    const { status, body } = await getAuth("/api/v2/events?severity=critical");
+    const arr    = status === 200 && Array.isArray(body) ? body : [];
+    const count  = arr.length;
+    const first  = arr[0]?.id ?? "(none)";
+    const allCrit = arr.every((e: any) => e.severity === "critical");
+
+    record(
+      "GET  /api/v2/events?severity=critical (1 critical event — mevt_08)",
+      "HTTP 200, count=1, id=mevt_08",
+      status !== 200
+        ? `HTTP ${status}`
+        : `HTTP 200, count=${count}, first=${first}, allCritical=${allCrit}`,
+      status === 200 && count === 1 && first === "mevt_08" && allCrit,
+    );
+  }
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   console.log("╔═══════════════════════════════════════════════════════════════╗");
-  console.log("║        SRSC v2 API Smoke Test  —  Brick 10Q                  ║");
+  console.log("║        SRSC v2 API Smoke Test  —  Brick 10U                  ║");
   console.log("╚═══════════════════════════════════════════════════════════════╝");
 
   try {

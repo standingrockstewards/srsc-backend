@@ -20,6 +20,50 @@ import {
 
 const router = Router();
 
+// GET /api/v2/events — account-level list (Brick 10U)
+// Must be registered BEFORE /:id to prevent "events" being swallowed as an :id param.
+//
+// Auth scoping:
+//   admin / supervisor  → events for ALL properties
+//   client              → events for properties owned by their customer record only
+//   field_tech          → events for ALL properties (no customer FK; same as staff)
+//   vendor              → 403 (requireNotVendor blocks before handler)
+//
+// Query params:
+//   ?severity=info|warning|critical   exact match, applied in SQL WHERE clause
+//   ?property_id=<id>                 narrow to one property (must be in caller scope)
+//   ?limit=<n>                        default 100, max 500
+//   ?offset=<n>                       default 0 (for pagination)
+router.get("/", requireNotVendor, async (req, res) => {
+  const { severity, property_id, limit, offset } = req.query;
+
+  const limitNum  = limit  ? Math.min(Number(String(limit)),  500) : 100;
+  const offsetNum = offset ? Number(String(offset)) : 0;
+
+  if (isNaN(limitNum) || limitNum < 1) {
+    return res.status(400).json({ error: "limit must be a positive integer (max 500)" });
+  }
+  if (isNaN(offsetNum) || offsetNum < 0) {
+    return res.status(400).json({ error: "offset must be a non-negative integer" });
+  }
+
+  try {
+    const events = await monitoringService.listForCaller(
+      req.v2Role     ?? "",
+      req.v2CustomerId ?? null,
+      {
+        severity:   severity    ? String(severity)    : undefined,
+        propertyId: property_id ? String(property_id) : undefined,
+        limit:      limitNum,
+        offset:     offsetNum,
+      },
+    );
+    return res.json(events);
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
 // GET /api/v2/events/:id — fetch a single event (owner-or-admin)
 // Ownership: resolved by looking up the event's propertyId, then checking property ownership.
 // Admin/supervisor bypass as usual. Vendors always 403.

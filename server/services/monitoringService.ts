@@ -13,7 +13,7 @@
  * All IDs are text (nanoid/cuid2) — no parseInt, no integer cast.
  */
 
-import { monitoringEventsRepo, type ListEventsOptions } from "../repositories/monitoringEvents";
+import { monitoringEventsRepo, type ListEventsOptions, type ListAllEventsOptions } from "../repositories/monitoringEvents";
 import { propertiesRepo } from "../repositories/properties";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -191,6 +191,42 @@ export const monitoringService = {
   /** Fetch a single event by id */
   async getEvent(id: string) {
     return monitoringEventsRepo.getById(id);
+  },
+
+  /**
+   * List events across all properties the caller is authorized to see.
+   * Brick 10U — account-level events feed.
+   *
+   * Auth scoping rules (mirrors requirePropertyOwnerOrAdmin):
+   *   admin / supervisor  → all properties (no ownership restriction)
+   *   client              → only properties where property.customerId = customerId
+   *   field_tech          → all properties (same as admin; field_tech passes
+   *                          requireNotVendor but has no customerId constraint)
+   *   vendor              → caller must be blocked BEFORE reaching this method
+   *
+   * Filters (severity, propertyId, limit, offset) are pushed into SQL via the repo.
+   */
+  async listForCaller(
+    role:       string,
+    customerId: string | null,
+    opts: Omit<ListAllEventsOptions, "propertyIds">,
+  ) {
+    let propertyIds: string[];
+
+    if (role === "admin" || role === "supervisor" || role === "field_tech") {
+      // Staff + field_tech see all properties
+      const allProps = await propertiesRepo.getAll();
+      propertyIds = allProps.map((p) => p.id);
+    } else if (role === "client" && customerId) {
+      // Client: only their own properties
+      const ownProps = await propertiesRepo.listByCustomer(customerId);
+      propertyIds = ownProps.map((p) => p.id);
+    } else {
+      // No authorized properties (vendor or unknown role)
+      propertyIds = [];
+    }
+
+    return monitoringEventsRepo.listAll({ propertyIds, ...opts });
   },
 
   /** Acknowledge an event (admin action) */
