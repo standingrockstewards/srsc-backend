@@ -913,11 +913,144 @@ async function runIsolationChecks(): Promise<void> {
 }
 
 
+
+// ── Brick 10X: Retainer Top-up Smoke ─────────────────────────────────────────
+//
+// MUTATION WARNING: This check writes a real ledger entry to prop_01 in the
+// live Postgres DB. The retainer_ledger table has NO delete or reversal
+// endpoint, so entries are permanent. The entry is written with a clearly
+// labelled note ("smoke-test top-up — do not act on") so operators can
+// identify and disregard it.
+//
+// If a delete/reversal endpoint is added in a future brick, wire cleanup here.
+//
+// Test matrix:
+//   1. GET current balance for prop_01  (admin)
+//   2. POST topup $1.00  (admin, type:"topup", never sends balance_after)
+//   3. GET new balance from /retainer/properties/prop_01/balance
+//   4. Assert newBalance == prevBalance + 1.00   (server derives balance_after)
+//   5. Verify HTTP 201 + returned entry has type=="topup" and correct balanceAfter
+//   6. SKIP note printed if endpoint unavailable (schema guard)
+//
+async function runRetainerTopUpChecks(): Promise<void> {
+  // ── 1. GET current balance ─────────────────────────────────────────────────
+  const DEMO_PROP = "prop_01";
+  const TOPUP_AMT = "1.00";
+  const TOPUP_NOTE = "smoke-test top-up — do not act on";
+
+  let prevBalance = "0.00";
+  {
+    const { status, body } = await getAuth(`/api/v2/retainer/properties/${DEMO_PROP}/balance`);
+    const ok = status === 200 && typeof (body as any)?.balance === "string";
+    if (ok) {
+      prevBalance = (body as any).balance as string;
+    }
+    record(
+      `retainer top-up: GET /retainer/properties/${DEMO_PROP}/balance`,
+      "HTTP 200, { balance: string }",
+      ok ? `HTTP 200, balance=${prevBalance}` : `HTTP ${status}`,
+      ok,
+    );
+    if (!ok) {
+      // Cannot proceed without a baseline balance — loudly SKIP the rest
+      console.warn(`
+⚠️  SKIP  retainer top-up POST check — could not read baseline balance (HTTP ${status}).`);
+      record(
+        `retainer top-up: POST /retainer/properties/${DEMO_PROP}/entries (topup)`,
+        "HTTP 201, balanceAfter = prev + 1.00",
+        `SKIPPED — baseline balance unavailable`,
+        "skip",
+      );
+      record(
+        `retainer top-up: GET /retainer/properties/${DEMO_PROP}/balance (post-topup)`,
+        `balance = ${prevBalance} + ${TOPUP_AMT}`,
+        `SKIPPED — baseline balance unavailable`,
+        "skip",
+      );
+      return;
+    }
+  }
+
+  // ── 2. POST topup ──────────────────────────────────────────────────────────
+  // client sends ONLY: type, amount, note  — NEVER balance_after
+  let returnedEntry: Record<string, unknown> | null = null;
+  {
+    const { status, body } = await postAuth(
+      `/api/v2/retainer/properties/${DEMO_PROP}/entries`,
+      { type: "topup", amount: TOPUP_AMT, note: TOPUP_NOTE },
+    );
+    const entry = (body as any);
+    const created = status === 201;
+    const hasId   = typeof entry?.id === "string";
+    const typeOk  = entry?.type === "topup";
+    const amtOk   = entry?.amount === TOPUP_AMT;
+    const balOk   = typeof entry?.balanceAfter === "string";
+    const allOk   = created && hasId && typeOk && amtOk && balOk;
+
+    if (allOk) returnedEntry = entry as Record<string, unknown>;
+
+    const actual = !created
+      ? `HTTP ${status}`
+      : `HTTP 201, id=${entry?.id}, type=${entry?.type}, amount=${entry?.amount}, balanceAfter=${entry?.balanceAfter}`;
+
+    record(
+      `retainer top-up: POST /retainer/properties/${DEMO_PROP}/entries (topup)`,
+      `HTTP 201, type=topup, amount=${TOPUP_AMT}, balanceAfter=string`,
+      actual,
+      allOk,
+    );
+
+    if (!allOk) {
+      console.warn(`
+⚠️  SKIP  retainer top-up balance assertion — POST failed (HTTP ${status}).`);
+      record(
+        `retainer top-up: GET /retainer/properties/${DEMO_PROP}/balance (post-topup)`,
+        `balance = prev + ${TOPUP_AMT}`,
+        `SKIPPED — POST did not succeed`,
+        "skip",
+      );
+      return;
+    }
+  }
+
+  // ── 3. GET new balance + assert server-derived balance_after ───────────────
+  {
+    const { status, body } = await getAuth(`/api/v2/retainer/properties/${DEMO_PROP}/balance`);
+    const newBalance = (body as any)?.balance as string | undefined;
+    const fetchOk    = status === 200 && typeof newBalance === "string";
+
+    const expectedBalance = (parseFloat(prevBalance) + parseFloat(TOPUP_AMT)).toFixed(2);
+    // Also check the balanceAfter returned in the POST response (server-computed)
+    const entryBalanceAfter = returnedEntry?.balanceAfter as string | undefined;
+    const entryBalanceOk    = entryBalanceAfter === expectedBalance;
+    const fetchBalanceOk    = fetchOk && newBalance === expectedBalance;
+    const allOk             = entryBalanceOk && fetchBalanceOk;
+
+    const actual = !fetchOk
+      ? `HTTP ${status}`
+      : [
+          `newBalance=${newBalance}`,
+          `entryBalanceAfter=${entryBalanceAfter}`,
+          `expected=${expectedBalance}`,
+          entryBalanceOk ? "entry_match=✓" : `entry_match=✗(got ${entryBalanceAfter})`,
+          fetchBalanceOk ? "fetch_match=✓" : `fetch_match=✗(got ${newBalance})`,
+        ].join(", ");
+
+    record(
+      `retainer top-up: GET /retainer/properties/${DEMO_PROP}/balance (post-topup)`,
+      `balance = ${prevBalance} + ${TOPUP_AMT} = ${expectedBalance}`,
+      actual,
+      allOk,
+    );
+  }
+}
+
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   console.log("╔═══════════════════════════════════════════════════════════════╗");
-  console.log("║        SRSC v2 API Smoke Test  —  Brick 10W                  ║");
+  console.log("║        SRSC v2 API Smoke Test  —  Brick 10X                  ║");
   console.log("╚═══════════════════════════════════════════════════════════════╝");
 
   try {
@@ -925,6 +1058,7 @@ async function main(): Promise<void> {
     await runAuthChecks();
     await runKbWriteChecks();
     await runIsolationChecks();
+    await runRetainerTopUpChecks();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`\nUnhandled error: ${msg}`);

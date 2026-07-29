@@ -1,5 +1,5 @@
 /**
- * src/pages/PropertyDetailPage.tsx  (Brick 10S)
+ * src/pages/PropertyDetailPage.tsx  (Brick 10S + Brick 10X)
  *
  * Route: /properties/:id  — inside RequireAuth / AppShell
  *
@@ -13,13 +13,22 @@
  * 404 property → not-found panel (no redirect — stays in AppShell).
  * 401 → existing apiFetch redirect handler fires automatically.
  *
+ * Brick 10X additions:
+ *   - "Record Top-up" button in retainer header (admin/supervisor only)
+ *   - TopUpModal: amount + optional note; no card/bank/payment data
+ *   - POST /api/v2/retainer/properties/:id/entries { type:"topup", amount, note }
+ *   - balance_after is ALWAYS server-derived — client never sends it
+ *   - On success: re-fetch retainer from server (no optimistic balance)
+ *   - Explicit confirm gate before submit
+ *
  * Auth: apiFetch (credentials: "include"). No hardcoded data.
  */
 
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, apiFetch } from "@/lib/api";
 import { formatMoney } from "@/lib/money";
+import { useAuth } from "@/context/AuthContext";
 import type {
   Property,
   MonitoringEvent,
@@ -282,6 +291,221 @@ function JobsTab({ jobs, loading, error }: {
 
 // ── Not Found ─────────────────────────────────────────────────────────────────
 
+
+// ── Brick 10X: Top-up Modal ───────────────────────────────────────────────────
+
+/**
+ * TopUpModal — admin/supervisor only.
+ *
+ * Collects: amount (positive numeric), optional note.
+ * NEVER collects card/bank/payment data.
+ * NEVER sends balance_after — server derives it from the running ledger.
+ *
+ * Flow:
+ *   1. User enters amount + note → clicks "Review"
+ *   2. Confirmation panel shows: "Record a $X top-up for <property>?"
+ *   3. User confirms → POST /api/v2/retainer/properties/:id/entries
+ *   4. On success → onSuccess() called → parent re-fetches retainer from server
+ *   5. API errors (400/403/409/500) surfaced inline — no crash
+ */
+interface TopUpModalProps {
+  propertyId:   string;
+  propertyName: string;
+  onClose:      () => void;
+  onSuccess:    () => void;
+}
+
+function TopUpModal({ propertyId, propertyName, onClose, onSuccess }: TopUpModalProps) {
+  const [amount,     setAmount]     = useState("");
+  const [note,       setNote]       = useState("");
+  const [phase,      setPhase]      = useState<"form" | "confirm">("form");
+  const [submitting, setSubmitting] = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+
+  const parsedAmount = parseFloat(amount);
+  const amountValid  = !isNaN(parsedAmount) && parsedAmount > 0;
+
+  const handleReview = () => {
+    setError(null);
+    if (!amountValid) {
+      setError("Please enter a valid positive amount.");
+      return;
+    }
+    setPhase("confirm");
+  };
+
+  const handleSubmit = async () => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      // POST only: type, amount (string), optional note.
+      // Never sends balance_after — server computes it from the running ledger.
+      await apiFetch(`/retainer/properties/${propertyId}/entries`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          type:   "topup",
+          amount: parsedAmount.toFixed(2),  // normalised string e.g. "100.00"
+          note:   note.trim() || undefined, // omit empty note
+        }),
+      });
+      // Success — parent re-fetches retainer from server (no optimistic balance)
+      onSuccess();
+    } catch (err: unknown) {
+      const msg =
+        err instanceof ApiError ? err.message
+        : err instanceof Error  ? err.message
+        : "Failed to record top-up.";
+      setError(msg);
+      setPhase("form");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="topup-modal-title"
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(0,0,0,0.45)",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: "var(--bg-card, #fff)",
+        borderRadius: 12, padding: 28, maxWidth: 440, width: "90%",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <h2 id="topup-modal-title" style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0 }}>
+            Record Top-up
+          </h2>
+          <button
+            className="btn btn--ghost"
+            style={{ fontSize: 18, padding: "2px 8px", lineHeight: 1 }}
+            onClick={onClose}
+            aria-label="Close"
+            disabled={submitting}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>
+        )}
+
+        {phase === "form" ? (
+          /* ── Form phase ── */
+          <>
+            <p style={{ margin: "0 0 16px 0", fontSize: 14, color: "var(--text-muted, #6b7280)" }}>
+              Records a ledger deposit for{" "}
+              <strong style={{ color: "inherit" }}>{propertyName}</strong>.
+              No card or bank data is collected — amount + note only.
+            </p>
+
+            {/* Amount */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="topup-amount">
+                Amount ($) <span aria-hidden="true" style={{ color: "#ef4444" }}>*</span>
+              </label>
+              <input
+                id="topup-amount"
+                className="input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="e.g. 500.00"
+                style={{ width: "100%" }}
+                autoFocus
+              />
+            </div>
+
+            {/* Note */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="topup-note">
+                Note
+                <span style={{ fontSize: 12, color: "var(--text-muted, #6b7280)", marginLeft: 6, fontWeight: 400 }}>
+                  optional
+                </span>
+              </label>
+              <input
+                id="topup-note"
+                className="input"
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. Client payment received 07/29"
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 8 }}>
+              <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
+              <button
+                className="btn btn--primary"
+                onClick={handleReview}
+                disabled={!amountValid}
+              >
+                Review
+              </button>
+            </div>
+          </>
+        ) : (
+          /* ── Confirm phase ── */
+          <>
+            <div style={{
+              background: "var(--bg-input, #f9fafb)",
+              border: "1px solid var(--border, #e5e7eb)",
+              borderRadius: 8, padding: "14px 16px", marginBottom: 20,
+            }}>
+              <p style={{ margin: "0 0 6px 0", fontWeight: 600, fontSize: 15 }}>
+                Record a {formatMoney(parsedAmount.toFixed(2))} top-up
+              </p>
+              <p style={{ margin: "0 0 4px 0", fontSize: 14, color: "var(--text-muted, #6b7280)" }}>
+                Property: <strong style={{ color: "inherit" }}>{propertyName}</strong>
+              </p>
+              {note.trim() && (
+                <p style={{ margin: "4px 0 0 0", fontSize: 13, color: "var(--text-muted, #6b7280)" }}>
+                  Note: {note.trim()}
+                </p>
+              )}
+              <p style={{ margin: "10px 0 0 0", fontSize: 12, color: "var(--text-muted, #6b7280)" }}>
+                This writes a ledger entry. Balance will be recalculated server-side.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                className="btn btn--ghost"
+                onClick={() => setPhase("form")}
+                disabled={submitting}
+              >
+                Back
+              </button>
+              <button
+                className="btn btn--primary"
+                onClick={() => void handleSubmit()}
+                disabled={submitting}
+              >
+                {submitting ? "Recording…" : "Confirm Top-up"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PropertyNotFound({ id }: { id: string }) {
   return (
     <div className="prop-not-found">
@@ -300,6 +524,10 @@ type Tab = "events" | "ledger" | "jobs";
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const propId  = id ?? "";
+  const { role } = useAuth();
+
+  // Brick 10X: role gate for top-up action
+  const isAdminOrSup = role === "admin" || role === "supervisor";
 
   const [property,  setProperty]  = useState<Property | null>(null);
   const [propErr,   setPropErr]   = useState<string | null>(null);
@@ -319,6 +547,22 @@ export function PropertyDetailPage() {
   const [jobErr,    setJobErr]    = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>("events");
+
+  // Brick 10X: top-up modal state
+  const [showTopUp, setShowTopUp] = useState(false);
+
+  // Brick 10X: re-fetch retainer from server after a top-up write
+  // Never fabricates the new balance — always gets server truth
+  const refreshRetainer = () => {
+    setRetLoad(true);
+    setRetErr(null);
+    api.get<RetainerResponse>(`/properties/${propId}/retainer`)
+      .then((data) => { setRetainer(data); setRetLoad(false); })
+      .catch((err: unknown) => {
+        setRetErr(err instanceof ApiError ? err.message : "Failed to load retainer.");
+        setRetLoad(false);
+      });
+  };
 
   useEffect(() => {
     if (!propId) return;
@@ -454,8 +698,31 @@ export function PropertyDetailPage() {
               Tier: <strong>{property.serviceTier}</strong>
             </div>
           )}
+          {/* Brick 10X: Record Top-up button — admin/supervisor only */}
+          {isAdminOrSup && (
+            <button
+              className="btn btn--secondary"
+              style={{ marginTop: 10, fontSize: 13, padding: "5px 14px" }}
+              onClick={() => setShowTopUp(true)}
+            >
+              + Record Top-up
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Brick 10X: Top-up modal (admin/supervisor only; guarded by isAdminOrSup above) */}
+      {showTopUp && isAdminOrSup && (
+        <TopUpModal
+          propertyId={propId}
+          propertyName={displayName ?? propId}
+          onClose={() => setShowTopUp(false)}
+          onSuccess={() => {
+            setShowTopUp(false);
+            refreshRetainer();   // re-fetch server truth — never optimistic
+          }}
+        />
+      )}
 
       {/* Tabs */}
       <div className="prop-tabs" role="tablist" aria-label="Property sections">
