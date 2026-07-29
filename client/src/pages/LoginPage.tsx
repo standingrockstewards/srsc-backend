@@ -1,10 +1,13 @@
 /**
- * src/pages/LoginPage.tsx
+ * src/pages/LoginPage.tsx  (Brick 10d — returnTo param for session-expiry redirect)
  *
  * Login form — POSTs to /api/v2/auth/login via the auth context.
- * On success, the session cookie is set by the browser automatically.
- * The context stores role + customerId in localStorage and React state.
- * After login, redirects to the page the user was trying to reach (or /dashboard).
+ * On success, redirects to the intended destination:
+ *   1. location.state.from  — RequireAuth guard sets this on initial auth check
+ *   2. ?returnTo=<path>     — global 401 handler sets this on session expiry
+ *   3. /dashboard           — default
+ *
+ * No token in localStorage. The session cookie is httpOnly — never touched in JS.
  */
 
 import { useState, type FormEvent } from "react";
@@ -22,12 +25,22 @@ export function LoginPage() {
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
 
-  // If already authenticated, skip to dashboard
-  const from = (location.state as { from?: Location })?.from?.pathname ?? "/dashboard";
+  // Resolve redirect destination:
+  //   state.from  → set by RequireAuth on unauthenticated access
+  //   ?returnTo=  → set by 401 handler on session expiry (Brick 10d)
+  //   /dashboard  → default
+  const stateFrom  = (location.state as { from?: { pathname: string } })?.from?.pathname;
+  const queryReturn = new URLSearchParams(location.search).get("returnTo");
+  const redirectTo = stateFrom ?? queryReturn ?? "/dashboard";
+
+  // If already authenticated, skip login page
   if (isAuthenticated) {
-    navigate(from, { replace: true });
+    navigate(redirectTo, { replace: true });
     return null;
   }
+
+  // Show session-expired notice when landing here from a 401 redirect
+  const isSessionExpired = !!queryReturn && !stateFrom;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -35,7 +48,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login(username.trim(), password);
-      navigate(from, { replace: true });
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(
@@ -68,11 +81,18 @@ export function LoginPage() {
         <h1 className="login-title">Sign in</h1>
         <p className="login-subtitle">Operations portal — authorized access only.</p>
 
+        {/* Session-expired notice */}
+        {isSessionExpired && !error && (
+          <div className="info-banner" role="status">
+            Your session expired. Please sign in again.
+          </div>
+        )}
+
         {/* Error */}
-        {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner" role="alert">{error}</div>}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} autoComplete="on">
+        <form onSubmit={handleSubmit} autoComplete="on" noValidate>
           <div className="form-group">
             <label className="form-label" htmlFor="username">Username</label>
             <input
@@ -85,6 +105,8 @@ export function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
               required
+              aria-required="true"
+              aria-describedby={error ? "login-error" : undefined}
             />
           </div>
 
@@ -100,10 +122,16 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
               required
+              aria-required="true"
             />
           </div>
 
-          <button className="btn-primary" type="submit" disabled={loading || !username || !password}>
+          <button
+            className="btn-primary"
+            type="submit"
+            disabled={loading || !username || !password}
+            aria-busy={loading}
+          >
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>

@@ -1,5 +1,5 @@
 /**
- * src/context/AuthContext.tsx
+ * src/context/AuthContext.tsx  (Brick 10d — 401 redirect handler registered)
  *
  * Auth state lives here. Source of truth is the server session (cookie).
  * On mount, <AuthProvider> calls GET /auth/me to hydrate from an existing session.
@@ -9,6 +9,13 @@
  * read or written in JS — it is httpOnly by design.
  *
  * No token. No Authorization header.
+ *
+ * 401 handling (Brick 10d):
+ *   registerUnauthorizedHandler() is called on mount. When any non-/auth/me
+ *   request returns 401 (session expired), the handler clears auth state and
+ *   redirects to /login?returnTo=<current path> so the user lands back where
+ *   they were after re-authenticating. The /auth/me path is excluded from the
+ *   handler to prevent a redirect loop on cold load.
  */
 
 import {
@@ -17,9 +24,11 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
-import { api, ApiError } from "@/lib/api";
+import { useNavigate, useLocation } from "react-router-dom";
+import { api, ApiError, registerUnauthorizedHandler } from "@/lib/api";
 import type { UserRole, Permissions, LoginResponse, AuthUser } from "@/types";
 
 // ── Context shape ──────────────────────────────────────────────────────────────
@@ -27,15 +36,14 @@ import type { UserRole, Permissions, LoginResponse, AuthUser } from "@/types";
 interface AuthState {
   user:        AuthUser | null;
   role:        UserRole | null;
-  customerId:  string | null;    // text cuid2 — null for non-client roles
+  customerId:  string | null;
   permissions: Permissions;
-  loading:     boolean;          // true while /me is in flight on mount
+  loading:     boolean;
 }
 
 interface AuthContextValue extends AuthState {
   login:  (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  /** True if auth check is done AND user is authenticated */
   isAuthenticated: boolean;
 }
 
@@ -60,6 +68,9 @@ function clearSession() {
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate  = useNavigate();
+  const location  = useLocation();
+
   const [state, setState] = useState<AuthState>({
     user:        null,
     role:        (localStorage.getItem(LS_ROLE) as UserRole | null) ?? null,
@@ -67,6 +78,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     permissions: {},
     loading:     true,
   });
+
+  // Keep a ref to current location so the 401 handler can read it without
+  // being re-registered every navigation (avoids stale closure).
+  const locationRef = useRef(location);
+  useEffect(() => { locationRef.current = location; }, [location]);
+
+  // Register the global 401 handler once on mount.
+  // When a non-/auth/me request returns 401, clear state + redirect to login
+  // with ?returnTo=<current path> so LoginPage can send the user back.
+  useEffect(() => {
+    registerUnauthorizedHandler(() => {
+      clearSession();
+      setState({ user: null, role: null, customerId: null, permissions: {}, loading: false });
+      const currentPath = locationRef.current.pathname + locationRef.current.search;
+      // Don't add returnTo if already on /login
+      if (currentPath !== "/login") {
+        navigate(`/login?returnTo=${encodeURIComponent(currentPath)}`, { replace: true });
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
 
   // Hydrate from existing session on mount
   useEffect(() => {
@@ -82,7 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch((err) => {
-        // 401 = no active session — clear stale localStorage
         if (err instanceof ApiError && err.status === 401) {
           clearSession();
         }

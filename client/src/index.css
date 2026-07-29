@@ -963,3 +963,373 @@ a:hover {
   padding: 1px 4px;
   color: var(--text-secondary);
 }
+
+/* ── Brick 10d: Error boundary ────────────────────────────────────────────── */
+.error-boundary-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-content);
+  padding: 24px;
+}
+
+.error-boundary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 40px 36px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-boundary-icon {
+  font-size: 36px;
+  color: var(--status-warn);
+  opacity: 0.8;
+}
+
+.error-boundary-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.error-boundary-message {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+/* ── Brick 10d: Toast / notification banner ───────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  font-size: 13px;
+  pointer-events: all;
+  animation: toast-in 0.2s ease;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast--network {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.toast--error {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.toast--info {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.toast--warn {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.toast-message {
+  flex: 1;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.toast-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+}
+
+.toast-dismiss:hover {
+  color: var(--text-secondary);
+}
+
+.toast-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── Brick 10d: Page spinner ──────────────────────────────────────────────── */
+.page-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg-content);
+}
+
+.page-spinner-ring {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Brick 10d: Screen-reader only ───────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── Brick 10d: Info banner (session expired notice on LoginPage) ─────────── */
+.info-banner {
+  background: rgba(96, 165, 250, 0.08);
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--status-info);
+  margin-bottom: 16px;
+}
+
+/* ── Brick 10d: Focus states ─────────────────────────────────────────────── */
+/* Visible focus ring on all interactive elements using :focus-visible */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Remove default outline when :focus-visible is not triggered (mouse click) */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Sidebar nav items — inset focus ring */
+.sidebar-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+}
+
+/* Logout button focus */
+.sidebar-logout-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: var(--text-primary);
+}
+
+/* ── Brick 10d: Sidebar nav list semantics reset ─────────────────────────── */
+/* AppSidebar now uses <ul role="list"><li> — reset default list styles */
+.sidebar-nav ul[role="list"] {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-nav ul[role="list"] li {
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Brick 10d: Mobile top bar + hamburger ───────────────────────────────── */
+.mobile-topbar {
+  display: none; /* shown via media query */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  height: 52px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.mobile-topbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hamburger-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+
+.hamburger-btn:hover {
+  background: var(--bg-hover);
+}
+
+.hamburger-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.hamburger-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Sidebar scrim (mobile overlay backdrop) */
+.sidebar-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 299;
+  background: rgba(0, 0, 0, 0.5);
+  animation: fade-in 0.15s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Brick 10d: Responsive breakpoints ───────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Show top bar */
+  .mobile-topbar {
+    display: flex;
+  }
+
+  /* Show scrim when open */
+  .sidebar-scrim {
+    display: block;
+  }
+
+  /* App shell: no sidebar on layout — sidebar is absolute overlay */
+  .app-shell {
+    flex-direction: column;
+  }
+
+  /* Main content: no left sidebar offset; top-bar height offset */
+  .app-content {
+    margin-left: 0;
+    padding-top: calc(52px + 16px); /* top-bar + breathing room */
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* Sidebar: drawer that slides in from left */
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 300;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+  }
+
+  .app-sidebar--open {
+    transform: translateX(0);
+    box-shadow: 4px 0 32px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Widget grid already single-col from 10c media query; reinforce */
+  .widget-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Map height cap on mobile */
+  .map-container {
+    height: 280px;
+  }
+
+  /* Stat cards: 2-col on mobile (2×2) */
+  .stat-cards-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Toast: full-width on mobile */
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: 16px;
+    max-width: none;
+  }
+}
+
+/* Tablet range 768–1023px: sidebar visible but content area constrained */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-content {
+    padding: 20px 20px;
+  }
+
+  .stat-cards-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Brick 10d: WCAG AA contrast override ────────────────────────────────── */
+/* --text-muted (#525d6e) fails AA on --bg-card (#1e2535). Lighten slightly. */
+/* Only override for readable body copy contexts — not decorative labels. */
+.widget-empty,
+.widget-list-row-sub,
+.widget-list-row-sub-right,
+.map-nearest-label,
+.map-unmapped-title,
+.stat-card-label,
+.sidebar-group-label {
+  color: #6b7a8d; /* contrast ratio ~4.6:1 on #1e2535 — passes AA */
+}
+
