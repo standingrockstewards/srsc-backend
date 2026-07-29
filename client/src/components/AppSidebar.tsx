@@ -1,16 +1,18 @@
 /**
- * src/components/AppSidebar.tsx
+ * src/components/AppSidebar.tsx  (Brick 10b — badge slots wired)
  *
  * Fixed 250px left sidebar with 4 nav groups.
  * Admin/Staff group hidden unless role is admin or supervisor.
- * Each nav item has an attention-badge slot (count=0 → hidden via .empty class).
- * Badges will be wired to live data in later bricks.
+ *
+ * Badge counts are passed in from AppShell (via useBadges hook).
+ * Each badge slot hides itself when count === 0 (via .empty class).
  */
 
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import type { BadgeCounts } from "@/hooks/useBadges";
 
-// ── Minimal inline SVG icons (no icon lib dependency for scaffold) ─────────────
+// ── Minimal inline SVG icons ──────────────────────────────────────────────────
 const Icon = {
   Dashboard: () => (
     <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -53,9 +55,10 @@ const Icon = {
 
 // ── Badge slot ────────────────────────────────────────────────────────────────
 function Badge({ count }: { count: number }) {
+  if (count === 0) return null;
   return (
-    <span className={`sidebar-badge ${count === 0 ? "empty" : ""}`}>
-      {count > 0 ? (count > 99 ? "99+" : count) : null}
+    <span className="sidebar-badge">
+      {count > 99 ? "99+" : count}
     </span>
   );
 }
@@ -82,7 +85,11 @@ function NavItem({ to, icon, label, badge = 0 }: NavItemProps) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-export function AppSidebar() {
+interface AppSidebarProps {
+  badges: BadgeCounts;
+}
+
+export function AppSidebar({ badges }: AppSidebarProps) {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -114,27 +121,50 @@ export function AppSidebar() {
         {/* Group: Overview */}
         <div className="sidebar-group">
           <span className="sidebar-group-label">Overview</span>
-          <NavItem to="/dashboard"   icon={<Icon.Dashboard />}   label="Dashboard" />
+          <NavItem to="/dashboard" icon={<Icon.Dashboard />} label="Dashboard" />
         </div>
 
-        {/* Group: Properties & People */}
+        {/* Group: Properties & People
+            Badge: count of low-retainer-balance properties
+            Source: GET /api/v2/retainer/low-balance (admin/supervisor only)
+            Non-staff: badge always 0 (403 silently degrades in useBadges) */}
         <div className="sidebar-group">
           <span className="sidebar-group-label">Properties &amp; People</span>
-          <NavItem to="/properties"  icon={<Icon.Properties />}  label="Properties" />
-          <NavItem to="/customers"   icon={<Icon.Customers />}   label="Customers" />
+          <NavItem
+            to="/properties"
+            icon={<Icon.Properties />}
+            label="Properties"
+            badge={badges.lowBalanceProperties}
+          />
+          <NavItem to="/customers" icon={<Icon.Customers />} label="Customers" />
         </div>
 
-        {/* Group: Field Operations */}
+        {/* Group: Field Operations
+            Badge: count of open/pending stewardship jobs
+            Source: GET /api/v2/jobs?status={pending|scheduled|dispatched|in_progress}
+            field_tech: scoped to their own jobs by the backend */}
         <div className="sidebar-group">
           <span className="sidebar-group-label">Field Operations</span>
-          <NavItem to="/field-ops"   icon={<Icon.FieldOps />}    label="Field Ops" badge={0} />
+          <NavItem
+            to="/field-ops"
+            icon={<Icon.FieldOps />}
+            label="Field Ops"
+            badge={badges.openJobs}
+          />
         </div>
 
-        {/* Group: Admin/Staff — hidden unless admin or supervisor */}
+        {/* Group: Admin/Staff — hidden unless admin or supervisor
+            Badge: count of pending referrals
+            Source: GET /api/v2/referrals?status=pending */}
         {isStaff && (
           <div className="sidebar-group">
             <span className="sidebar-group-label">Admin / Staff</span>
-            <NavItem to="/admin"     icon={<Icon.Admin />}       label="Admin Panel" />
+            <NavItem
+              to="/admin"
+              icon={<Icon.Admin />}
+              label="Admin Panel"
+              badge={badges.pendingReferrals}
+            />
           </div>
         )}
 
