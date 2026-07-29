@@ -87,3 +87,27 @@ router.get("/:id/statement-summary", requireSelfOrAdmin("id"), async (req, res) 
 });
 
 export default router;
+
+// GET /api/v2/customers/:customerId/referrals  (Brick 9)
+// Returns all referrals where the customer is the referrer or the referred party.
+// Owner-or-admin: customers see only their own; admin/supervisor see any.
+import { referralsRepo as _referralsRepo } from "../../repositories/referrals";
+router.get("/:customerId/referrals", requireSelfOrAdmin("customerId"), async (req, res) => {
+  const { customerId } = req.params;
+  try {
+    const [asReferrer, asReferred] = await Promise.all([
+      _referralsRepo.listByReferrer(customerId),
+      _referralsRepo.listByReferred(customerId),
+    ]);
+    // Merge and deduplicate (a referral can appear in both lists if same customer is referrer+referred, though createReferral guards against that)
+    const seen = new Set<string>();
+    const all = [...asReferrer, ...asReferred].filter(r => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+    return res.json(all);
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+});

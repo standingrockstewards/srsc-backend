@@ -8,7 +8,7 @@
 
 import {
   pgTable, varchar, text, decimal, integer,
-  boolean, timestamp, date, pgEnum, numeric, index, jsonb,
+  boolean, timestamp, date, numeric, index, jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -19,13 +19,13 @@ import { nanoid } from "nanoid";
 export const id = () => text("id").primaryKey().$defaultFn(() => nanoid());
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
-export const referralStatusEnum = pgEnum("referral_status", [
-  "pending", "vested", "forfeited", "applied",
-]);
+// referral_status is plain text in the live DB — TS union only, NO pgEnum.
+export const REFERRAL_STATUSES = ["pending", "qualified", "vested", "cancelled", "expired"] as const;
+export type ReferralStatus = typeof REFERRAL_STATUSES[number];
 
-export const creditSourceEnum = pgEnum("credit_source", [
-  "referral", "refund", "adjustment",
-]);
+// credit_source is plain text in the live DB — TS union only, NO pgEnum.
+export const CREDIT_SOURCES = ["referral", "refund", "adjustment"] as const;
+export type CreditSource = typeof CREDIT_SOURCES[number];
 
 // retainer_type is plain text in the live DB (no pg enum).
 export const RETAINER_ENTRY_TYPES = ["topup", "charge", "credit_applied", "adjustment"] as const;
@@ -122,14 +122,16 @@ export const referrals = pgTable("referrals", {
   id:                  id(),
   referrerCustomerId:  text("referrer_customer_id").notNull().references(() => customers.id),
   referredCustomerId:  text("referred_customer_id").notNull().references(() => customers.id),
-  status:              referralStatusEnum("status").notNull().default("pending"),
-  bonusCreditAmount:   decimal("bonus_credit_amount", { precision: 10, scale: 2 }).notNull(),
-  vestsAt:             timestamp("vests_at"),
-  createdAt:           timestamp("created_at").notNull().defaultNow(),
-  updatedAt:           timestamp("updated_at").notNull().defaultNow(),
+  status:              text("status").notNull().default("pending"),
+  bonusCreditAmount:   money("bonus_credit_amount").notNull(),
+  vestsAt:             timestamp("vests_at", { mode: "date", withTimezone: true }),
+  createdAt:           timestamp("created_at", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+  updatedAt:           timestamp("updated_at", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertReferralSchema = createInsertSchema(referrals).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertReferralSchema = createInsertSchema(referrals)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({ status: z.enum(REFERRAL_STATUSES).optional() });
 export type InsertReferral = z.infer<typeof insertReferralSchema>;
 export type Referral = typeof referrals.$inferSelect;
 
@@ -137,10 +139,10 @@ export type Referral = typeof referrals.$inferSelect;
 export const accountCredits = pgTable("account_credits", {
   id:         id(),
   customerId: text("customer_id").notNull().references(() => customers.id),
-  amount:     decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  source:     creditSourceEnum("source").notNull(),
+  amount:     money("amount").notNull(),
+  source:     text("source").notNull(),
   applied:    boolean("applied").notNull().default(false),
-  createdAt:  timestamp("created_at").notNull().defaultNow(),
+  createdAt:  timestamp("created_at", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertAccountCreditSchema = createInsertSchema(accountCredits).omit({ id: true, createdAt: true });
