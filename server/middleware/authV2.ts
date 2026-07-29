@@ -85,7 +85,7 @@ export async function requireAuthV2(
 
   // Resolve v2 customerId (text) for client roles (join on email)
   if (user.role === "client") {
-    const customer = await customersRepo.getByEmail(user.email);
+    const customer = await customersRepo.getIdByEmail(user.email);
     req.v2CustomerId = customer?.id ?? null;  // string | null
   } else {
     req.v2CustomerId = null; // staff have no customer record

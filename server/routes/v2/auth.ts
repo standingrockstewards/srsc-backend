@@ -68,7 +68,7 @@ router.post("/login", async (req, res) => {
   // Resolve v2 customerId if this is a client (text cuid2, not integer)
   let customerId: string | null = null;
   if (user.role === "client") {
-    const customer = await customersRepo.getByEmail(user.email);
+    const customer = await customersRepo.getIdByEmail(user.email);
     customerId = customer?.id ?? null;
   }
 
@@ -111,7 +111,7 @@ router.get("/me", requireAuthV2, async (req, res) => {
   // Resolve v2 customerId (text cuid2, not integer)
   let customerId: string | null = null;
   if (user.role === "client") {
-    const customer = await customersRepo.getByEmail(user.email);
+    const customer = await customersRepo.getIdByEmail(user.email);
     customerId = customer?.id ?? null;
   }
 

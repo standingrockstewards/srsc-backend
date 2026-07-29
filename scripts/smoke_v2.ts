@@ -1,5 +1,5 @@
 /**
- * scripts/smoke_v2.ts  (Brick 10Q)
+ * scripts/smoke_v2.ts  (Brick 10U / 10V)
  *
  * Read-only smoke test for the v2 API against known seeded data.
  * Uses Node 18+ native fetch — zero new dependencies.
@@ -13,9 +13,12 @@
  *   API_BASE=http://localhost:5000 SMOKE_USER=admin SMOKE_PASS=admin123 npx tsx scripts/smoke_v2.ts
  *
  * Env vars:
- *   API_BASE    — Base URL (default: http://localhost:5000)
- *   SMOKE_USER  — Username for login (optional; auth checks SKIPPED if absent)
- *   SMOKE_PASS  — Password for login (optional; auth checks SKIPPED if absent)
+ *   API_BASE           — Base URL (default: http://localhost:5000)
+ *   SMOKE_USER         — Admin username for login (optional; auth checks SKIPPED if absent)
+ *   SMOKE_PASS         — Admin password for login (optional; auth checks SKIPPED if absent)
+ *   SMOKE_CLIENT_PASS  — Password for demo client users (Brick 10V isolation checks).
+ *                        Must match the password used in seed_demo_clients.ts.
+ *                        If absent, isolation checks are SKIPPED with a loud warning.
  *
  * Exit codes:
  *   0 — all checks PASS (or clearly SKIPPED)
@@ -26,10 +29,12 @@
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const API_BASE   = (process.env["API_BASE"]   ?? "http://localhost:5000").replace(/\/$/, "");
-const SMOKE_USER =  process.env["SMOKE_USER"] ?? "";
-const SMOKE_PASS =  process.env["SMOKE_PASS"] ?? "";
-const HAS_CREDS  = Boolean(SMOKE_USER && SMOKE_PASS);
+const API_BASE          = (process.env["API_BASE"]          ?? "http://localhost:5000").replace(/\/$/, "");
+const SMOKE_USER        =  process.env["SMOKE_USER"]        ?? "";
+const SMOKE_PASS        =  process.env["SMOKE_PASS"]        ?? "";
+const SMOKE_CLIENT_PASS =  process.env["SMOKE_CLIENT_PASS"] ?? "";  // Brick 10V: demo client password
+const HAS_CREDS         = Boolean(SMOKE_USER && SMOKE_PASS);
+const HAS_CLIENT_CREDS  = Boolean(SMOKE_CLIENT_PASS);               // Brick 10V: isolation checks gate
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +101,47 @@ function record(endpoint: string, expected: string, actual: string, pass: boolea
   const status: Status = pass === "skip" ? "SKIPPED" : pass ? "PASS" : "FAIL";
   results.push({ endpoint, expected, actual, status });
   if (status === "FAIL") anyFail = true;
+}
+
+// ── Brick 10V: per-session helpers for tenant isolation checks ────────────────
+
+/**
+ * Log in as a specific user and return their session cookie string.
+ * Returns null if login fails (check will be marked FAIL by caller).
+ */
+async function loginAs(username: string, password: string): Promise<string | null> {
+  const res = await fetch(`${API_BASE}/api/v2/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) return null;
+
+  // Extract cookie — same logic as extractCookie() but returns the value
+  const COOKIE_RE = /(__Host-srsc-v2=[^;]+|srsc-v2-smoke=[^;]+)/;
+  const raw = (res.headers as any).getSetCookie?.() as string[] | undefined;
+  if (raw) {
+    for (const c of raw) {
+      const m = c.match(COOKIE_RE);
+      if (m?.[1]) return m[1];
+    }
+  }
+  const single = res.headers.get("set-cookie") ?? "";
+  const m2 = single.match(COOKIE_RE);
+  return m2?.[1] ?? null;
+}
+
+/**
+ * GET a path using a specific session cookie (not the global sessionCookie).
+ * Used by tenant isolation checks so each client session is independent.
+ */
+async function getAuthAs(path: string, cookie: string): Promise<{ status: number; body: unknown }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { Cookie: cookie },
+  });
+  let body: unknown;
+  try { body = await res.json(); } catch { body = null; }
+  return { status: res.status, body };
 }
 
 function printTable(): void {
@@ -446,16 +492,186 @@ async function runAuthChecks(): Promise<void> {
   }
 }
 
+
+// ── Brick 10V: Tenant Isolation Checks ────────────────────────────────────────
+
+/**
+ * Tenant isolation checks.
+ *
+ * Logs in as each demo client user (demo_client_1/2/3) and verifies:
+ *   - GET /api/v2/events returns ONLY their own events (positive count + zero cross-tenant)
+ *   - GET /api/v2/properties returns ONLY their own properties
+ *
+ * Demo client → customer mapping (seeded by seed_demo_clients.ts, Brick 10V):
+ *   demo_client_1  →  pcust_01  (prop_01, prop_02 — 6 events: mevt_01..06)
+ *   demo_client_2  →  pcust_02  (prop_03, prop_04 — 5 events: mevt_07..11)
+ *   demo_client_3  →  pcust_03  (prop_05           — 1 event:  mevt_12)
+ *
+ * SKIPPED with a loud warning if SMOKE_CLIENT_PASS is not set — never silently PASS.
+ * Non-zero exit on any FAIL.
+ */
+async function runIsolationChecks(): Promise<void> {
+  console.log(`\n── Brick 10V: Tenant isolation checks ──────────────────────────────`);
+
+  if (!HAS_CLIENT_CREDS) {
+    // LOUD warning — never silently pass
+    console.warn("\n  ⚠⚠⚠  WARNING: SMOKE_CLIENT_PASS not set — tenant isolation checks SKIPPED.  ⚠⚠⚠");
+    console.warn("  Set SMOKE_CLIENT_PASS to the password used in seed_demo_clients.ts to enable these checks.\n");
+    const toSkip = [
+      "isolation: demo_client_1 → pcust_01: login",
+      "isolation: demo_client_1 → pcust_01: GET /events (6 own, 0 cross-tenant)",
+      "isolation: demo_client_1 → pcust_01: GET /properties (2 own)",
+      "isolation: demo_client_2 → pcust_02: login",
+      "isolation: demo_client_2 → pcust_02: GET /events (5 own, 0 cross-tenant)",
+      "isolation: demo_client_2 → pcust_02: GET /properties (2 own)",
+      "isolation: demo_client_3 → pcust_03: login",
+      "isolation: demo_client_3 → pcust_03: GET /events (1 own, 0 cross-tenant)",
+      "isolation: demo_client_3 → pcust_03: GET /properties (1 own)",
+    ];
+    for (const ep of toSkip) {
+      record(ep, "—", "SKIPPED ⚠ SMOKE_CLIENT_PASS not set", "skip");
+    }
+    return;
+  }
+
+  console.log(`   SMOKE_CLIENT_PASS: set\n`);
+
+  const CLIENTS = [
+    {
+      username:       "demo_client_1",
+      customerId:     "pcust_01",
+      ownPropIds:     ["prop_01", "prop_02"],
+      foreignPropIds: ["prop_03", "prop_04", "prop_05"],
+      ownEventCount:  6,
+      ownEventIds:    ["mevt_01","mevt_02","mevt_03","mevt_04","mevt_05","mevt_06"],
+      foreignEventIds:["mevt_07","mevt_08","mevt_09","mevt_10","mevt_11","mevt_12"],
+    },
+    {
+      username:       "demo_client_2",
+      customerId:     "pcust_02",
+      ownPropIds:     ["prop_03", "prop_04"],
+      foreignPropIds: ["prop_01", "prop_02", "prop_05"],
+      ownEventCount:  5,
+      ownEventIds:    ["mevt_07","mevt_08","mevt_09","mevt_10","mevt_11"],
+      foreignEventIds:["mevt_01","mevt_02","mevt_03","mevt_04","mevt_05","mevt_06","mevt_12"],
+    },
+    {
+      username:       "demo_client_3",
+      customerId:     "pcust_03",
+      ownPropIds:     ["prop_05"],
+      foreignPropIds: ["prop_01", "prop_02", "prop_03", "prop_04"],
+      ownEventCount:  1,
+      ownEventIds:    ["mevt_12"],
+      foreignEventIds:["mevt_01","mevt_02","mevt_03","mevt_04","mevt_05",
+                       "mevt_06","mevt_07","mevt_08","mevt_09","mevt_10","mevt_11"],
+    },
+  ] as const;
+
+  for (const c of CLIENTS) {
+    const { username, customerId, ownPropIds, foreignPropIds,
+            ownEventCount, ownEventIds, foreignEventIds } = c;
+    const label = `${username} → ${customerId}`;
+
+    // ── 1. Login ──────────────────────────────────────────────────────────────
+    let cookie: string | null = null;
+    try {
+      cookie = await loginAs(username, SMOKE_CLIENT_PASS);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      record(`isolation: ${label}: login`, `HTTP 200 + session cookie`, `LOGIN ERROR: ${msg}`, false);
+      record(`isolation: ${label}: GET /events (${ownEventCount} own, 0 cross-tenant)`, "—", "SKIPPED (login failed)", "skip");
+      record(`isolation: ${label}: GET /properties (${ownPropIds.length} own)`, "—", "SKIPPED (login failed)", "skip");
+      continue;
+    }
+
+    if (!cookie) {
+      record(`isolation: ${label}: login`, `HTTP 200 + session cookie`,
+             `FAIL — login returned no session cookie (HTTP 4xx or cookie missing)`, false);
+      record(`isolation: ${label}: GET /events (${ownEventCount} own, 0 cross-tenant)`, "—", "SKIPPED (login failed)", "skip");
+      record(`isolation: ${label}: GET /properties (${ownPropIds.length} own)`, "—", "SKIPPED (login failed)", "skip");
+      continue;
+    }
+
+    record(`isolation: ${label}: login`, `HTTP 200 + session cookie`, `HTTP 200, session cookie obtained`, true);
+
+    // ── 2. GET /api/v2/events — events isolation ────────────────────────────
+    {
+      const { status, body } = await getAuthAs("/api/v2/events?limit=500", cookie);
+      const arr = status === 200 && Array.isArray(body)
+        ? body as Array<{ id: string; propertyId: string }>
+        : [];
+
+      const returnedIds   = arr.map((e) => e.id);
+      const returnedProps = Array.from(new Set(arr.map((e) => e.propertyId)));
+
+      const countOk        = status === 200 && arr.length === ownEventCount;
+      const crossEventIds  = returnedIds.filter((id) => (foreignEventIds as readonly string[]).includes(id));
+      const noCrossTenant  = crossEventIds.length === 0;
+      const crossProps     = returnedProps.filter((pid) => (foreignPropIds as readonly string[]).includes(pid));
+      const noCrossProp    = crossProps.length === 0;
+
+      const allPass = status === 200 && countOk && noCrossTenant && noCrossProp;
+
+      const actualDesc = status !== 200
+        ? `HTTP ${status}`
+        : [
+            `count=${arr.length}/${ownEventCount}`,
+            `ownProps=[${returnedProps.sort().join(",")}]`,
+            crossEventIds.length > 0 ? `CROSS-TENANT-EVENTS=[${crossEventIds.join(",")}]` : `crossEvents=0`,
+            crossProps.length    > 0 ? `CROSS-TENANT-PROPS=[${crossProps.join(",")}]`     : `crossProps=0`,
+          ].join(" | ");
+
+      record(
+        `isolation: ${label}: GET /events (${ownEventCount} own, 0 cross-tenant)`,
+        `HTTP 200, count=${ownEventCount}, crossEvents=0, crossProps=0`,
+        actualDesc,
+        allPass,
+      );
+    }
+
+    // ── 3. GET /api/v2/properties — properties isolation ───────────────────
+    {
+      const { status, body } = await getAuthAs("/api/v2/properties", cookie);
+      const arr = status === 200 && Array.isArray(body)
+        ? body as Array<{ id: string }>
+        : [];
+
+      const returnedPropIds = arr.map((p) => p.id);
+      const countOk         = status === 200 && arr.length === ownPropIds.length;
+      const crossPropIds    = returnedPropIds.filter((id) => (foreignPropIds as readonly string[]).includes(id));
+      const noCross         = crossPropIds.length === 0;
+      const allPass         = status === 200 && countOk && noCross;
+
+      const actualDesc = status !== 200
+        ? `HTTP ${status}`
+        : [
+            `count=${arr.length}/${ownPropIds.length}`,
+            `ids=[${returnedPropIds.sort().join(",")}]`,
+            crossPropIds.length > 0 ? `CROSS-TENANT=[${crossPropIds.join(",")}]` : `cross=0`,
+          ].join(" | ");
+
+      record(
+        `isolation: ${label}: GET /properties (${ownPropIds.length} own)`,
+        `HTTP 200, count=${ownPropIds.length}, cross=0`,
+        actualDesc,
+        allPass,
+      );
+    }
+  }
+}
+
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   console.log("╔═══════════════════════════════════════════════════════════════╗");
-  console.log("║        SRSC v2 API Smoke Test  —  Brick 10U                  ║");
+  console.log("║        SRSC v2 API Smoke Test  —  Brick 10V                  ║");
   console.log("╚═══════════════════════════════════════════════════════════════╝");
 
   try {
     await runPublicChecks();
     await runAuthChecks();
+    await runIsolationChecks();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`\nUnhandled error: ${msg}`);

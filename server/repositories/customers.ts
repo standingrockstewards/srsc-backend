@@ -17,6 +17,20 @@ export const customersRepo = {
     return row ?? null;
   },
 
+  /**
+   * Brick 10V: schema-safe variant used by auth middleware.
+   * The live `customers` table has schema drift (missing `phone`, `updated_at`).
+   * Selecting only `id` avoids querying non-existent columns.
+   * Auth only needs the customer id for the v2CustomerId join.
+   */
+  async getIdByEmail(email: string): Promise<{ id: string } | null> {
+    const [row] = await db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(eq(customers.email, email));
+    return row ?? null;
+  },
+
   async create(data: InsertCustomer) {
     const [row] = await db.insert(customers).values(data).returning();
     return row;
