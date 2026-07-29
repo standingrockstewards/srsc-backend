@@ -18,6 +18,7 @@ import { dashboardRouter } from "./dashboard-routes";
 import { notificationRouter } from "./notification-routes";
 import { searchRouter } from "./search-routes";
 import { auditRouter } from "./audit-routes";
+import adminVaultRouter from "./routes/adminVault";   // Brick 10Z
 import v2Router from "./routes/v2";
 
 export function registerRoutes(httpServer: Server, app: Express) {
@@ -42,6 +43,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.use("/api", notificationRouter);
   app.use("/api", searchRouter);
   app.use("/api", auditRouter);
+  // ─── ADMIN VAULT (Brick 10Z) ─────────────────────────────────────────────────
+  app.use("/api/admin", adminVaultRouter);
   // ─── V2 API ──────────────────────────────────────────────────────────────────
   app.use("/api/v2", v2Router);
   // ─── HEALTH ─────────────────────────────────────────────────────────────────

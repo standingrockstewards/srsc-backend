@@ -3052,3 +3052,117 @@ a:hover {
   .jobs-filter-select { min-width: unset; width: 100%; }
   .mon-event-right { display: none; }  /* hide ack badge on very small screens */
 }
+
+/* ── Brick 10Z: Admin Vault ─────────────────────────────────────────────── */
+.vault-state-msg {
+  padding: 32px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.vault-state-err { color: var(--status-err); }
+
+.vault-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.vault-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.vault-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-hover);
+}
+.vault-cell {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.vault-row:last-child .vault-cell { border-bottom: none; }
+.vault-row--revealed { background: rgba(34,197,94,0.04); }
+
+.vault-cell-id code {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.vault-cuid {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
+}
+.vault-none { color: var(--text-muted); opacity: 0.5; }
+
+/* Masked placeholder */
+.vault-mask {
+  font-family: monospace;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* Revealed plaintext */
+.vault-plaintext {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+}
+.vault-countdown {
+  font-size: 0.72rem;
+  font-family: inherit;
+  color: var(--status-warn);
+  font-weight: 600;
+  min-width: 2.5ch;
+}
+
+/* Reveal button */
+.vault-reveal-btn {
+  padding: 5px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.vault-reveal-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.vault-reveal-btn--active {
+  background: var(--bg-hover);
+  border-color: var(--status-ok);
+  color: var(--status-ok);
+}
+.vault-reveal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .vault-cell-id { display: none; }   /* hide numeric ID on mobile — label + action is enough */
+  .vault-cell-customer { display: none; }
+}

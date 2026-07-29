@@ -32,6 +32,7 @@ import { CalendarPage }          from "@/pages/CalendarPage";
 import { KbEditorPage }          from "@/pages/KbEditorPage";      // Brick 10W: KB article editor
 import { KbEditorListPage }      from "@/pages/KbEditorListPage";  // Brick 10W: KB admin list
 import { AccountSecurityPage }   from "@/pages/AccountSecurityPage"; // Brick 10Y: 2FA/TOTP security
+import { AdminVaultPage }        from "@/pages/AdminVaultPage";        // Brick 10Z: encrypted vault
 // Brick 10k: public KB pages (no auth required)
 import { KbIndexPage }           from "@/pages/KbIndexPage";
 import { KbCategoryPage }        from "@/pages/KbCategoryPage";
@@ -148,6 +149,16 @@ export default function App() {
                   }
                 />
               </Route>
+
+                {/* Brick 10Z: Encrypted Vault — admin only */}
+                <Route
+                  path="/admin/vault"
+                  element={
+                    <RequireRole roles={["admin"]}>
+                      <AdminVaultPage />
+                    </RequireRole>
+                  }
+                />
 
               {/* Catch-all */}
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

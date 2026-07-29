@@ -90,6 +90,15 @@ const Icon = {
       <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" />
     </svg>
   ),
+  // Brick 10Z: vault/key icon for Encrypted Vault nav item (admin only)
+  Vault: () => (
+    <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+      <rect x="2" y="3" width="12" height="11" rx="1.5" />
+      <circle cx="8" cy="8.5" r="1.5" />
+      <path d="M8 10v1.5" strokeLinecap="round" />
+      <path d="M5 3V2a3 3 0 0 1 6 0v1" />
+    </svg>
+  ),
   // Brick 10Y: shield/lock icon for Account Security nav item
   Security: () => (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
@@ -296,6 +305,15 @@ export function AppSidebar({
                 label="KB Admin"
                 onNavClick={onNavClick}
               />
+              {/* Brick 10Z: Encrypted Vault — admin only */}
+              {role === "admin" && (
+                <NavItem
+                  to="/admin/vault"
+                  icon={<Icon.Vault />}
+                  label="Vault"
+                  onNavClick={onNavClick}
+                />
+              )}
             </ul>
           </div>
         )}

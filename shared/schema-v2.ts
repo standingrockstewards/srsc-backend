@@ -506,3 +506,57 @@ export type InsertKbCategory = z.infer<typeof insertKbCategorySchema>;
 export type InsertKbArticle  = z.infer<typeof insertKbArticleSchema>;
 export type KbCategory = typeof kbCategories.$inferSelect;
 export type KbArticle  = typeof kbArticles.$inferSelect;
+
+// ─── vault_secrets (Brick 10Z) ────────────────────────────────────────────────
+// Standalone encrypted secrets. Each row holds one AES-256-GCM encrypted value.
+// Ciphertext, IV, and auth-tag are stored as hex strings so no binary driver
+// concerns exist. The plaintext is NEVER stored; decryption happens on-demand
+// in the reveal endpoint only.
+//
+// PK is bigserial (auto-increment integer) per spec — this table is intentionally
+// NOT using the nanoid text-id convention because the spec prescribes bigserial.
+// secretId FK in vault_reveal_log mirrors this type.
+//
+// customerId is TEXT (cuid2) — nullable; associates a secret with a customer.
+
+import { bigserial, bigint as bigintPg } from "drizzle-orm/pg-core";
+
+export const vaultSecrets = pgTable("vault_secrets", {
+  id:         bigserial("id", { mode: "bigint" }).primaryKey(),
+  label:      text("label").notNull(),
+  customerId: text("customer_id"),                    // nullable cuid2 ref
+  ciphertext: text("ciphertext").notNull(),           // hex AES-256-GCM ciphertext
+  iv:         text("iv").notNull(),                   // hex 12-byte IV
+  authTag:    text("auth_tag").notNull(),             // hex 16-byte GCM auth tag
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type VaultSecret = typeof vaultSecrets.$inferSelect;
+
+// ─── vault_reveal_log (Brick 10Z) ─────────────────────────────────────────────
+// Append-only audit log. EVERY reveal attempt writes exactly one row regardless
+// of outcome. No UPDATE or DELETE routes will ever be added.
+//
+// outcome CHECK: 'success' | 'denied' | 'key_missing' | 'decrypt_error'
+// (enforced at application layer via TS union — Drizzle plain text column)
+
+export const VAULT_REVEAL_OUTCOMES = ["success", "denied", "key_missing", "decrypt_error"] as const;
+export type VaultRevealOutcome = typeof VAULT_REVEAL_OUTCOMES[number];
+
+export const vaultRevealLog = pgTable(
+  "vault_reveal_log",
+  {
+    id:         bigserial("id", { mode: "bigint" }).primaryKey(),
+    secretId:   bigintPg("secret_id", { mode: "bigint" }).notNull().references(() => vaultSecrets.id),
+    revealedBy: text("revealed_by").notNull(),        // string of SQLite users.id
+    customerId: text("customer_id"),                  // copied from vaultSecrets at log time
+    outcome:    text("outcome").notNull(),             // VaultRevealOutcome
+    ip:         text("ip"),
+    revealedAt: timestamp("revealed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    secretIdx: index("idx_vault_reveal_log_secret").on(t.secretId),
+  }),
+);
+
+export type VaultRevealLog = typeof vaultRevealLog.$inferSelect;
