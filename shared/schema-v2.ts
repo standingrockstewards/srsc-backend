@@ -458,3 +458,51 @@ export const vaultAccessLog = pgTable(
 );
 
 export type VaultAccessLog = typeof vaultAccessLog.$inferSelect;
+
+// ─── Knowledge Base (Brick 10i) ───────────────────────────────────────────────
+
+export const KB_STATUSES   = ["draft", "published"] as const;
+export type KbStatus = typeof KB_STATUSES[number];
+
+export const KB_ASSET_TYPES = ["guide", "tip", "regulation", "how-to", "faq", "alert"] as const;
+export type KbAssetType = typeof KB_ASSET_TYPES[number];
+
+export const kbCategories = pgTable("kb_categories", {
+  id:          id(),
+  slug:        text("slug").notNull().unique(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  sortOrder:   integer("sort_order").notNull().default(0),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const kbArticles = pgTable(
+  "kb_articles",
+  {
+    id:          id(),
+    categoryId:  text("category_id").notNull().references(() => kbCategories.id),
+    title:       text("title").notNull(),
+    slug:        text("slug").notNull().unique(),
+    bodyMd:      text("body_md").notNull().default(""),
+    tags:        text("tags").array().notNull().default([]),
+    assetType:   text("asset_type"),
+    status:      text("status").notNull().default("draft"),
+    authorId:    text("author_id").notNull(),
+    authorName:  text("author_name").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    categoryIdx: index("idx_kb_art_cat").on(t.categoryId),
+    statusIdx:   index("idx_kb_art_status").on(t.status),
+    updatedIdx:  index("idx_kb_art_updated").on(t.updatedAt),
+  }),
+);
+
+export const insertKbCategorySchema = createInsertSchema(kbCategories).omit({ id: true, createdAt: true });
+export const insertKbArticleSchema  = createInsertSchema(kbArticles).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertKbCategory = z.infer<typeof insertKbCategorySchema>;
+export type InsertKbArticle  = z.infer<typeof insertKbArticleSchema>;
+export type KbCategory = typeof kbCategories.$inferSelect;
+export type KbArticle  = typeof kbArticles.$inferSelect;

@@ -37,6 +37,7 @@ declare global {
       v2UserId?:     number;       // v1 users.id (SQLite, internal only)
       v2Role?:       string;
       v2CustomerId?: string | null; // Postgres customers.id — text (nanoid/cuid2)
+      v2Username?:   string;         // SQLite users.username — for author stamping
     }
   }
 }
@@ -78,8 +79,9 @@ export async function requireAuthV2(
     }
   }
 
-  req.v2UserId = user.id;
-  req.v2Role   = user.role;
+  req.v2UserId   = user.id;
+  req.v2Role     = user.role;
+  req.v2Username = user.username;
 
   // Resolve v2 customerId (text) for client roles (join on email)
   if (user.role === "client") {

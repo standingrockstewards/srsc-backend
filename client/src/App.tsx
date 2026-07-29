@@ -26,6 +26,8 @@ import { AdminPage }      from "@/pages/AdminPage";
 import { OpsMapPage }            from "@/pages/OpsMapPage";
 import { TwoFactorSetupPage }    from "@/pages/TwoFactorSetupPage";
 import { CalendarPage }          from "@/pages/CalendarPage";
+import { KbPage }                from "@/pages/KbPage";
+import { KbEditorPage }          from "@/pages/KbEditorPage";  // Brick 10i: KB editor
 
 // Bridge: registers the network error handler once ToastProvider is in scope.
 // Must be a child of ToastProvider so useToast() works.
@@ -93,6 +95,25 @@ export default function App() {
                   element={
                     <RequireRole roles={["admin", "supervisor", "field_tech"]}>
                       <OpsMapPage />
+                    </RequireRole>
+                  }
+                />
+
+                {/* Brick 10i — Knowledge Base */}
+                <Route path="/kb" element={<KbPage />} />
+                <Route
+                  path="/kb/editor"
+                  element={
+                    <RequireRole roles={["admin", "supervisor"]}>
+                      <KbEditorPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/kb/editor/:id"
+                  element={
+                    <RequireRole roles={["admin", "supervisor"]}>
+                      <KbEditorPage />
                     </RequireRole>
                   }
                 />

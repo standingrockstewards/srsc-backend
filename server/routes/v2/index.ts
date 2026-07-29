@@ -32,6 +32,7 @@ import jobsRouter               from "./jobs";               // Brick 8: steward
 import markersRouter            from "./markers";             // Brick 10e-prereq: shoreline markers
 import visitsRouter             from "./visits";              // Brick 10g: scheduled visits
 import calendarRouter           from "./calendar";             // Brick 10g: merged calendar feed
+import kbRouter                 from "./kb";                   // Brick 10i: knowledge base
 
 const v2 = Router();
 
@@ -61,5 +62,6 @@ v2.use("/jobs",                 jobsRouter);                 // Brick 8: steward
 v2.use("/markers",              markersRouter);              // Brick 10e-prereq: shoreline markers
 v2.use("/visits",               visitsRouter);               // Brick 10g: scheduled visits CRUD
 v2.use("/calendar",             calendarRouter);             // Brick 10g: merged calendar feed
+v2.use("/kb",                   kbRouter);                    // Brick 10i: knowledge base
 
 export default v2;

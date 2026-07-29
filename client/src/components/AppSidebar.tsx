@@ -64,6 +64,13 @@ const Icon = {
       <circle cx="8" cy="6" r="1.5"/>
     </svg>
   ),
+  KnowledgeBase: () => (
+    <svg className="sidebar-item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+      <path d="M3 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+      <path d="M5 5h4M5 7.5h4M5 10h2" />
+      <path d="M11 2l2 2v9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   Logout: () => (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
       <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" />
@@ -129,6 +136,7 @@ export function AppSidebar({
   const navigate = useNavigate();
 
   const isStaff  = role === "admin" || role === "supervisor";
+  const isVendor  = role === "vendor";
   // Ops Map visible to staff + field_tech; hidden from vendor and client
   const isOpsMap  = role === "admin" || role === "supervisor" || role === "field_tech";
 
@@ -218,6 +226,21 @@ export function AppSidebar({
             )}
           </ul>
         </div>
+
+        {/* Group: Resources — visible to all non-vendor (vendor blocked at route/API) */}
+        {!isVendor && (
+          <div className="sidebar-group">
+            <span className="sidebar-group-label" aria-hidden="true">Resources</span>
+            <ul role="list">
+              <NavItem
+                to="/kb"
+                icon={<Icon.KnowledgeBase />}
+                label="Knowledge Base"
+                onNavClick={onNavClick}
+              />
+            </ul>
+          </div>
+        )}
 
         {/* Group: Admin/Staff */}
         {isStaff && (
