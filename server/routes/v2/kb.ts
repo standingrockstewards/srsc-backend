@@ -1,41 +1,115 @@
 /**
- * server/routes/v2/kb.ts  (Brick 10i)
+ * server/routes/v2/kb.ts  (Brick 10i + Brick 10j)
  *
- * Knowledge Base API.
+ * Two routers exported:
  *
- * Categories:
- *   GET    /api/v2/kb/categories            — all roles (non-vendor)
- *   POST   /api/v2/kb/categories            — admin/supervisor
- *   PATCH  /api/v2/kb/categories/:id        — admin/supervisor
- *   DELETE /api/v2/kb/categories/:id        — admin/supervisor
+ *   kbPublicRouter  — NO auth required. Published data only.
+ *     GET  /api/v2/kb/categories
+ *     GET  /api/v2/kb/articles?category=<slug>&tag=<t>&q=<search>
+ *     GET  /api/v2/kb/articles/:slug      (published only; 404 on draft/missing)
  *
- * Articles:
- *   GET    /api/v2/kb/articles              — non-vendor; ?category=&tag=&search=&status=
- *                                             status defaults to "published";
- *                                             admin/supervisor may pass status=all or status=draft
- *   GET    /api/v2/kb/articles/tags         — published tags list (non-vendor)
- *   GET    /api/v2/kb/articles/:idOrSlug    — non-vendor; draft only visible to admin/supervisor
- *   POST   /api/v2/kb/articles              — admin/supervisor
- *   PATCH  /api/v2/kb/articles/:id          — admin/supervisor; updated_at + published_at set here
- *   DELETE /api/v2/kb/articles/:id          — admin/supervisor
+ *   default (router)  — requireAuthV2 wall. All roles except vendor see published;
+ *                        admin/supervisor see drafts + full CRUD.
+ *     GET    /api/v2/kb/categories
+ *     POST   /api/v2/kb/categories
+ *     PATCH  /api/v2/kb/categories/:id
+ *     DELETE /api/v2/kb/categories/:id
+ *     GET    /api/v2/kb/articles              ?category=&tag=&search=&status=
+ *     GET    /api/v2/kb/articles/tags
+ *     GET    /api/v2/kb/articles/:idOrSlug    (draft visible to admin/supervisor only)
+ *     POST   /api/v2/kb/articles
+ *     PATCH  /api/v2/kb/articles/:id
+ *     DELETE /api/v2/kb/articles/:id
  *
- * Role scoping:
- *   vendor              → 403 on all routes
- *   client / field_tech → GET published only
- *   admin / supervisor  → full CRUD + draft access
+ * Mount order in index.ts (IMPORTANT):
+ *   v2.use("/kb", kbPublicRouter);    // before requireAuthV2
+ *   ...
+ *   v2.use(requireAuthV2);
+ *   v2.use("/kb", router);            // after requireAuthV2
  */
 
 import { Router, type Request, type Response } from "express";
 import { requireAuthV2 } from "../../middleware/authV2";
 import { kbCategoriesRepo, kbArticlesRepo } from "../../repositories/kb";
 
+// ═══════════════════════════════════════════════════════════════════
+// PUBLIC ROUTER  — no auth, published data only
+// ═══════════════════════════════════════════════════════════════════
+
+export const kbPublicRouter = Router();
+
+/**
+ * GET /api/v2/kb/categories
+ * Returns all categories ordered by sort_order. No auth required.
+ */
+kbPublicRouter.get("/categories", async (_req: Request, res: Response) => {
+  try {
+    return res.json(await kbCategoriesRepo.getAll());
+  } catch {
+    return res.status(500).json({ error: "Failed to load categories." });
+  }
+});
+
+/**
+ * GET /api/v2/kb/articles?category=<slug>&tag=<t>&q=<search>
+ * Returns published articles only. category param is a category SLUG.
+ * No auth required.
+ */
+kbPublicRouter.get("/articles", async (req: Request, res: Response) => {
+  const { category, tag, q, limit, offset } = req.query as Record<string, string | undefined>;
+
+  // Resolve category slug → id if provided
+  let categoryId: string | undefined;
+  if (category) {
+    const cat = await kbCategoriesRepo.getBySlug(category);
+    if (!cat) return res.json([]); // unknown slug → empty result, not 404
+    categoryId = cat.id;
+  }
+
+  try {
+    const articles = await kbArticlesRepo.list({
+      categoryId,
+      tag,
+      search: q,
+      status: "published",
+      limit:  limit  ? Number(limit)  : 50,
+      offset: offset ? Number(offset) : 0,
+    });
+    return res.json(articles);
+  } catch {
+    return res.status(500).json({ error: "Failed to load articles." });
+  }
+});
+
+/**
+ * GET /api/v2/kb/articles/:slug
+ * Returns a single published article by slug. 404 if draft or missing.
+ * Note: only slug lookup — not ID — for the public API.
+ */
+kbPublicRouter.get("/articles/:slug", async (req: Request, res: Response) => {
+  const slug = String(req.params["slug"]);
+  try {
+    const article = await kbArticlesRepo.getBySlug(slug);
+    if (!article || article.status !== "published") {
+      return res.status(404).json({ error: "Article not found." });
+    }
+    return res.json(article);
+  } catch {
+    return res.status(500).json({ error: "Failed to load article." });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// AUTHENTICATED ROUTER  — requireAuthV2 applied at mount site
+// ═══════════════════════════════════════════════════════════════════
+
 const router = Router();
 router.use(requireAuthV2);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function isAdminOrSup(role: string)     { return role === "admin" || role === "supervisor"; }
-function isVendor(role: string)         { return role === "vendor"; }
+function isAdminOrSup(role: string) { return role === "admin" || role === "supervisor"; }
+function isVendor(role: string)     { return role === "vendor"; }
 
 function requireNotVendorKb(req: Request, res: Response): boolean {
   if (isVendor(req.v2Role ?? "")) {
@@ -136,8 +210,8 @@ router.get("/articles", async (req: Request, res: Response) => {
 router.get("/articles/:idOrSlug", async (req: Request, res: Response) => {
   if (!requireNotVendorKb(req, res)) return;
 
-  const role      = req.v2Role ?? "";
-  const idOrSlug  = String(req.params["idOrSlug"]);
+  const role     = req.v2Role ?? "";
+  const idOrSlug = String(req.params["idOrSlug"]);
 
   // Try by ID first, then slug
   let article = await kbArticlesRepo.getById(idOrSlug);
@@ -157,9 +231,7 @@ router.get("/articles/:idOrSlug", async (req: Request, res: Response) => {
 router.post("/articles", async (req: Request, res: Response) => {
   if (!requireAdminSupKb(req, res)) return;
 
-  const {
-    categoryId, title, slug, bodyMd, tags, assetType, status,
-  } = req.body as Record<string, unknown>;
+  const { categoryId, title, slug, bodyMd, tags, assetType, status } = req.body as Record<string, unknown>;
 
   if (!categoryId || !title || !slug) {
     return res.status(400).json({ error: "categoryId, title, slug are required." });
@@ -189,19 +261,16 @@ router.post("/articles", async (req: Request, res: Response) => {
   }
 });
 
-// ── Articles: update ──────────────────────────────────────────────────────────
-// updated_at and published_at managed in kbArticlesRepo.update()
+// ── Articles: update (updated_at + published_at managed in repo) ──────────────
 
 router.patch("/articles/:id", async (req: Request, res: Response) => {
   if (!requireAdminSupKb(req, res)) return;
 
-  const id      = String(req.params["id"]);
+  const id       = String(req.params["id"]);
   const existing = await kbArticlesRepo.getById(id);
   if (!existing) return res.status(404).json({ error: "Article not found." });
 
-  const {
-    categoryId, title, slug, bodyMd, tags, assetType, status,
-  } = req.body as Record<string, unknown>;
+  const { categoryId, title, slug, bodyMd, tags, assetType, status } = req.body as Record<string, unknown>;
 
   const patch: Record<string, unknown> = {};
   if (categoryId !== undefined) patch["categoryId"] = String(categoryId);

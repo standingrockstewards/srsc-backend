@@ -32,7 +32,7 @@ import jobsRouter               from "./jobs";               // Brick 8: steward
 import markersRouter            from "./markers";             // Brick 10e-prereq: shoreline markers
 import visitsRouter             from "./visits";              // Brick 10g: scheduled visits
 import calendarRouter           from "./calendar";             // Brick 10g: merged calendar feed
-import kbRouter                 from "./kb";                   // Brick 10i: knowledge base
+import kbRouter, { kbPublicRouter } from "./kb";               // Brick 10i/10j: knowledge base
 
 const v2 = Router();
 
@@ -40,6 +40,7 @@ const v2 = Router();
 v2.use("/health",       healthRouter);
 v2.use("/auth",         authRouter);
 v2.use("/integrations", integrationsRouter);   // POST /api/v2/integrations/:provider
+v2.use("/kb",           kbPublicRouter);       // Brick 10j: public KB read (no auth)
 
 // ── Protected routes (require valid v2 session) ────────────────────────────────
 v2.use(requireAuthV2);
