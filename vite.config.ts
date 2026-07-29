@@ -13,6 +13,14 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname, "client"),
   base: "/",
+  define: {
+    // Bake in a same-origin default so the SPA works when VITE_API_BASE is not
+    // set in the build environment (e.g. Render). A .env file or Render env var
+    // with VITE_API_BASE set will override this at Vite build time.
+    "import.meta.env.VITE_API_BASE": JSON.stringify(
+      process.env.VITE_API_BASE ?? "/api/v2"
+    ),
+  },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,

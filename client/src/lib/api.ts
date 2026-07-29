@@ -14,11 +14,10 @@
  * - Every failure is either thrown (caller degrades) or logged — no silent drops.
  */
 
-const BASE = import.meta.env.VITE_API_BASE as string;
-
-if (!BASE) {
-  console.error("[api] VITE_API_BASE is not set. Check your .env file.");
-}
+// VITE_API_BASE is baked in at build time by vite.config.ts define block.
+// Falls back to "/api/v2" so the SPA always works same-origin even if the
+// env var was absent during the build.
+const BASE: string = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api/v2";
 
 export class ApiError extends Error {
   constructor(
