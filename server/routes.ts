@@ -66,6 +66,17 @@ export function registerRoutes(httpServer: Server, app: Express) {
     res.json({ user: safeUser, permissions: effectivePerms });
   });
 
+  // GET /api/auth/me - null-safe session hydration (header-based auth)
+app.get("/api/auth/me", (req, res) => {
+const userId = Number(req.headers["x-user-id"]);
+if (!userId) return res.json({ user: null });
+const user = storage.getUserById(userId);
+if (!user) return res.json({ user: null });
+const { password: _pw, ...safeUser } = user;
+const effectivePerms = getEffectivePermissions(user.id, user.role);
+res.json({ user: safeUser, permissions: effectivePerms });
+});
+
   app.get("/api/auth/me/:id", (req, res) => {
     const user = storage.getUserById(Number(req.params.id));
     if (!user) return res.status(404).json({ error: "Not found" });
