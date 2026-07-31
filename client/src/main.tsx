@@ -1,7 +1,13 @@
-import { StrictMode, Component, type ErrorInfo, type ReactNode } from "react";
+import { StrictMode, Component, Suspense, lazy, type ErrorInfo, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
-import App from "./App";
+
+// App is loaded lazily so its entire import graph is evaluated INSIDE the
+// React async boundary below (wrapped by Suspense + ErrorBoundary). If any
+// module in that graph throws at evaluation time (e.g. a circular-import
+// temporal-dead-zone error), it surfaces as a catchable error and is shown
+// on screen instead of leaving a blank white page.
+const App = lazy(() => import("./App"));
 
 interface EBState { error: Error | null; }
 class ErrorBoundary extends Component<{ children: ReactNode }, EBState> {
@@ -42,7 +48,9 @@ try {
   createRoot(rootEl).render(
     <StrictMode>
       <ErrorBoundary>
-        <App />
+        <Suspense fallback={<div style={{ padding: 24, fontFamily: "monospace" }}>Loading…</div>}>
+          <App />
+        </Suspense>
       </ErrorBoundary>
     </StrictMode>,
   );
