@@ -22,6 +22,7 @@ declare module "http" {
 const allowedOrigins = [
   "https://ornate-druid-2c73a1.netlify.app",
   "https://standingrockstewards.com",
+  "https://app.standingrockstewards.com",
   "https://www.standingrockstewards.com",
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
   // Vite dev server — only in non-production
