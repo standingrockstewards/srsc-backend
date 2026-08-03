@@ -3166,3 +3166,21 @@ a:hover {
   .vault-cell-id { display: none; }   /* hide numeric ID on mobile — label + action is enough */
   .vault-cell-customer { display: none; }
 }
+
+
+/* ── Brand typography override ─────────────────────────────────────────────── */
+:root {
+  --font-sans:    "Source Sans 3", system-ui, -apple-system, sans-serif;
+  --font-display: "Playfair Display", Georgia, serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6,
+.kb-prose h1, .kb-prose h2, .kb-prose h3, .kb-prose h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
