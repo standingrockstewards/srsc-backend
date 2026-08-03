@@ -4,6 +4,7 @@ import type { Server } from "http";
 import { storage, sqlite } from "./storage";
 import { sendAARForReport, buildAARPreviewHtml } from "./aar-job";
 import { geocodeAddress } from "./weather-engine";
+import { hashPassword, verifyPassword } from "./lib/password";
 import {
   requirePermission, getEffectivePermissions, PERMISSION_META, ROLE_DEFAULTS,
   initPermissionsTable, PERMISSIONS, type PermissionKey,
@@ -53,13 +54,17 @@ export function registerRoutes(httpServer: Server, app: Express) {
   });
 
   // ─── AUTH ───────────────────────────────────────────────────────────────────
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
     const user = storage.getUserByUsername(username);
-    if (!user || user.password !== password) {
+        if (!user) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
+    const passwordOk = await verifyPassword(password, user.password);
+if (!passwordOk) {
+return res.status(401).json({ error: "Invalid username or password" });
+}
     const { password: _pw, ...safeUser } = user;
     // Include effective permissions in login response so frontend can gate immediately
     const effectivePerms = getEffectivePermissions(user.id, user.role);
