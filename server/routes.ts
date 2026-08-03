@@ -325,7 +325,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
   });
 
   // ─── DASHBOARD STATS ────────────────────────────────────────────────────────
-  app.get("/api/dashboard/stats", (req, res) => {
+  app.get("/api/dashboard/stats", requirePermission("view_dashboard"), (req, res) => {
     const allProps = storage.getAllProperties();
     const allVisits = storage.getAllVisits();
     const openRecs = storage.getOpenRecommendations();
