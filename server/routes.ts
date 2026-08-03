@@ -681,7 +681,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
   });
 
   // ─── VENDOR MESSAGES ────────────────────────────────────────────────────────
-  app.get("/api/vendor-messages", (req, res) => {
+  app.get("/api/vendor-messages", requirePermission(PERMISSIONS.VIEW_VENDORS), (req, res) => {
     try {
       const { vendorId } = req.query;
       const msgs = storage.getVendorMessages(vendorId ? Number(vendorId) : undefined);
@@ -886,16 +886,18 @@ res.json({ user: safeUser, permissions: effectivePerms });
   });
 
   // POST /api/account/change-password
-  app.post("/api/account/change-password", (req, res) => {
+  app.post("/api/account/change-password", async (req, res) => {
     try {
       const { userId, currentPassword, newPassword } = req.body;
       if (!userId || !currentPassword || !newPassword) return res.status(400).json({ error: "Missing fields" });
-      if (newPassword.length < 6) return res.status(400).json({ error: "New password must be at least 6 characters" });
+          if (newPassword.length < 12) return res.status(400).json({ error: "New password must be at least 12 characters" });
       const user = storage.getUserById(Number(userId));
       if (!user) return res.status(404).json({ error: "User not found" });
-      if (user.password !== currentPassword) return res.status(401).json({ error: "Current password is incorrect" });
+          const currentOk = await verifyPassword(currentPassword, user.password);
+if (!currentOk) return res.status(401).json({ error: "Current password is incorrect" });
+const hashedNew = await hashPassword(newPassword);
       sqlite.prepare("UPDATE users SET password = ?, password_updated_at = ? WHERE id = ?")
-        .run(newPassword, new Date().toISOString(), Number(userId));
+              .run(hashedNew, new Date().toISOString(), Number(userId));
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -951,7 +953,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
                 <p style="color:#ccc;"><strong style="color:#F5F0EA;">${client?.name}</strong> submitted a request for <strong style="color:#C05A43;">${prop?.nickname}</strong>.</p>
                 <p style="color:#ccc;"><strong>Category:</strong> ${category}</p>
                 <p style="color:#ccc;"><strong>Description:</strong> ${description}</p>
-                <a href="https://standingrockstewards.com/#/service-requests" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#C05A43;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">View Request</a>
+                <a href="https://app.standingrockstewards.com/#/service-requests" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#C05A43;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">View Request</a>
               </div>`,
             });
           } catch {}
