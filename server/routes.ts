@@ -82,7 +82,7 @@ const effectivePerms = getEffectivePermissions(user.id, user.role);
 res.json({ user: safeUser, permissions: effectivePerms });
 });
 
-  app.get("/api/auth/me/:id", (req, res) => {
+  app.get("/api/auth/me/:id", requirePermission(PERMISSIONS.MANAGE_USERS), (req, res) => {
     const user = storage.getUserById(Number(req.params.id));
     if (!user) return res.status(404).json({ error: "Not found" });
     const { password: _pw, ...safeUser } = user;
@@ -108,7 +108,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
     res.json(allUsers);
   });
 
-  app.get("/api/users/techs", (req, res) => {
+  app.get("/api/users/techs", requirePermission(PERMISSIONS.VIEW_ALL_PROPERTIES), (req, res) => {
     // open to admin/supervisor for assignment dropdowns — gated by view_all_properties in practice
     const techs = storage.getAllUsers()
       .filter(u => u.role === "field_tech" && u.active)
@@ -179,7 +179,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
   });
 
   // ─── PROPERTIES ─────────────────────────────────────────────────────────────
-  app.get("/api/properties", (req, res) => {
+  app.get("/api/properties", requirePermission(PERMISSIONS.VIEW_ALL_PROPERTIES), (req, res) => {
     const { techId, clientUserId } = req.query;
     if (techId) return res.json(storage.getPropertiesByTech(Number(techId)));
     if (clientUserId) {
@@ -205,7 +205,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
     res.json(prop);
   });
 
-  app.post("/api/properties", (req, res) => {
+  app.post("/api/properties", requirePermission(PERMISSIONS.CREATE_PROPERTIES), (req, res) => {
     try {
       const prop = storage.createProperty(req.body);
       res.status(201).json(prop);
@@ -214,14 +214,14 @@ res.json({ user: safeUser, permissions: effectivePerms });
     }
   });
 
-  app.patch("/api/properties/:id", (req, res) => {
+  app.patch("/api/properties/:id", requirePermission(PERMISSIONS.EDIT_PROPERTIES), (req, res) => {
     const prop = storage.updateProperty(Number(req.params.id), req.body);
     if (!prop) return res.status(404).json({ error: "Not found" });
     res.json(prop);
   });
 
   // ─── VISITS ─────────────────────────────────────────────────────────────────
-  app.get("/api/visits", (req, res) => {
+  app.get("/api/visits", requirePermission(PERMISSIONS.VIEW_ALL_VISITS), (req, res) => {
     const { propertyId, techId, recent } = req.query;
     if (propertyId) return res.json(storage.getVisitsByProperty(Number(propertyId)));
     if (techId) return res.json(storage.getVisitsByTech(Number(techId)));
@@ -229,13 +229,13 @@ res.json({ user: safeUser, permissions: effectivePerms });
     res.json(storage.getAllVisits());
   });
 
-  app.get("/api/visits/:id", (req, res) => {
+  app.get("/api/visits/:id", requirePermission(PERMISSIONS.VIEW_ALL_VISITS), (req, res) => {
     const visit = storage.getVisitById(Number(req.params.id));
     if (!visit) return res.status(404).json({ error: "Not found" });
     res.json(visit);
   });
 
-  app.post("/api/visits", (req, res) => {
+  app.post("/api/visits", requirePermission(PERMISSIONS.CREATE_VISITS), (req, res) => {
     try {
       const visit = storage.createVisit(req.body);
       res.status(201).json(visit);
@@ -244,7 +244,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
     }
   });
 
-  app.patch("/api/visits/:id", (req, res) => {
+  app.patch("/api/visits/:id", requirePermission(PERMISSIONS.EDIT_VISITS), (req, res) => {
     const visit = storage.updateVisit(Number(req.params.id), req.body);
     if (!visit) return res.status(404).json({ error: "Not found" });
     res.json(visit);
@@ -278,7 +278,7 @@ res.json({ user: safeUser, permissions: effectivePerms });
     res.json(storage.getVendorsByVisit(Number(req.params.visitId)));
   });
 
-  app.post("/api/visits/:visitId/vendors", (req, res) => {
+  app.post("/api/visits/:visitId/vendors", requirePermission(PERMISSIONS.MANAGE_VENDORS), (req, res) => {
     const vendor = storage.createVendorDispatch({
       ...req.body,
       visitId: Number(req.params.visitId),
