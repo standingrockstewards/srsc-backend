@@ -10,6 +10,8 @@ import { startAARScheduler } from "./aar-job";
 import { startWeatherEngine } from "./weather-engine";
 
 const app = express();
+// Trust Render's TLS-terminating proxy so express-session emits the Secure cookie.
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
