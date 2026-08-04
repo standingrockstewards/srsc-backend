@@ -11,7 +11,7 @@ services:
     region: oregon
     plan: free
     branch: main
-    buildCommand: "npm install && npm run build && npm run db:push"
+    buildCommand: "npm install && npm run build"
     startCommand: node index.cjs
     healthCheckPath: /api/health
     envVars:
