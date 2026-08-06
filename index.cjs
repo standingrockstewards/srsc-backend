@@ -6,6 +6,7 @@
     var server=_orig(app);
     // app is the express instance - add our route now
     if(app&&typeof app==='function'){
+		try{ app.set('etag',false); app.use('/api',function(_req,res,next){ res.set('Cache-Control','no-store, no-cache, must-revalidate'); next(); }); console.log('[SRSC] ETag disabled + no-store on /api'); }catch(e){ console.error('[SRSC] etag/no-store patch failed',e); }
       var bcrypt=require('bcryptjs');
 		    var nodemailer=require('nodemailer');
 		    var _mailer=nodemailer.createTransport({host:'smtp.zoho.com',port:465,secure:true,auth:{user:'info@standingrockstewards.com',pass:process.env.ZOHO_PASS}});
