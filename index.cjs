@@ -12,7 +12,7 @@
 		    var _mailer=nodemailer.createTransport({host:'smtp.zoho.com',port:465,secure:true,auth:{user:'info@standingrockstewards.com',pass:process.env.ZOHO_PASS}});
       var jwt=require('jsonwebtoken');
       var Database=require('better-sqlite3');
-      var _db=new Database('./data.db');
+            var _fs=require('fs'); var _dbPath=process.env.SQLITE_PATH||'./data.db'; try{ if(_dbPath!=='./data.db' && !_fs.existsSync(_dbPath) && _fs.existsSync('./data.db')){ _fs.copyFileSync('./data.db',_dbPath); console.log('[SRSC] seeded persistent DB from ./data.db -> '+_dbPath); } }catch(_e){ console.error('[SRSC] DB seed-copy error:',_e.message); } var _db=new Database(_dbPath); console.log('[SRSC] SQLite opened at '+_dbPath);
       			var _secret=process.env.JWT_SECRET;if(!_secret){console.error('[SRSC] FATAL: JWT_SECRET env var is not set. Refusing to start with an insecure default.');process.exit(1);}
       // Delete placeholder users and hash passwords at startup
       try{
