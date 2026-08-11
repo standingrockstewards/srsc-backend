@@ -11,6 +11,8 @@
 		    var nodemailer=require('nodemailer');
 		    var _mailer=nodemailer.createTransport({host:'smtp.zoho.com',port:465,secure:true,auth:{user:'info@standingrockstewards.com',pass:process.env.ZOHO_PASS}});
       var jwt=require('jsonwebtoken');
+		var usersStore=require('./users-store.cjs');
+		if(usersStore.USE_PG){ usersStore.ensureSchema().then(function(){return usersStore.seedIfEmpty();}).then(function(){console.log('[SRSC] Postgres users schema+seed ensured');}).catch(function(e){console.error('[SRSC] pg users init error:',e.message);}); }
       var Database=require('better-sqlite3');
       var _db=new Database('./data.db');
       			var _secret=process.env.JWT_SECRET;if(!_secret){console.error('[SRSC] FATAL: JWT_SECRET env var is not set. Refusing to start with an insecure default.');process.exit(1);}
@@ -38,7 +40,7 @@ try{require('./vendor-messages.cjs').registerVendorMessagesRoute(app);try{requir
               var parsed=JSON.parse(body);
               var username=parsed.username;var password=parsed.password;
               if(!username||!password)return res.status(400).json({error:"Missing credentials"});
-              var user=_db.prepare("SELECT * FROM users WHERE username=? AND active=1").get(username);
+              var user=await usersStore.getByUsername(username);
               if(!user||!user.password.startsWith("$2"))return res.status(401).json({error:"Invalid credentials"});
               var valid=await bcrypt.compare(password,user.password);
               if(!valid)return res.status(401).json({error:"Invalid credentials"});
@@ -58,12 +60,12 @@ try{require('./vendor-messages.cjs').registerVendorMessagesRoute(app);try{requir
           var cp=req.body&&req.body.currentPassword;var np=req.body&&req.body.newPassword;
           if(!cp||!np)return res.status(400).json({error:"Missing fields"});
           if(np.length<8)return res.status(400).json({error:"Password must be 8+ chars"});
-          var user=_db.prepare("SELECT * FROM users WHERE id=?").get(decoded.id);
+          var user=await usersStore.getById(decoded.id);
           if(!user)return res.status(404).json({error:"User not found"});
           var valid=await bcrypt.compare(cp,user.password);
           if(!valid)return res.status(401).json({error:"Current password incorrect"});
           var hash=await bcrypt.hash(np,12);
-          _db.prepare("UPDATE users SET password=? WHERE id=?").run(hash,user.id);
+          await usersStore.updatePassword(user.id,hash);
           res.json({message:"Password changed successfully"});
         }catch(err){res.status(500).json({error:err.message});}
       });
